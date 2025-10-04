@@ -15,8 +15,8 @@ const geist = Geist({
 });
 
 export const metadata: Metadata = {
-  title: 'knm',
-  description: '',
+  title: 'Navio - Public Transport Navigator',
+  description: 'Navigate Cracow public transport with ease and confidence.',
 };
 
 const RootLayout: FC<PropsWithChildren> = async ({ children }) => {
@@ -28,10 +28,7 @@ const RootLayout: FC<PropsWithChildren> = async ({ children }) => {
         <head>
           {/* eslint-disable-next-line */}
           <script crossOrigin="anonymous" src="//unpkg.com/react-scan/dist/auto.global.js" />
-          <link
-            rel="stylesheet"
-            href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css"
-          />
+          <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@3.6.1/dist/maplibre-gl.css" />
         </head>
       )}
 

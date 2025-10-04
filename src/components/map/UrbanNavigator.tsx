@@ -2,27 +2,34 @@
 
 import {
   AlertTriangle,
+  Bike,
   Bus,
+  BusFront,
   Calendar,
   Clock,
+  FlagTriangleRight,
   MapIcon,
   MapPin,
   MessageCircle,
   Navigation,
+  Pin,
   Route,
   Search,
+  Settings2,
   Star,
   Train,
+  TramFront,
   Users,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { FC, useCallback, useEffect, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 import { Icon, LatLng as LeafletLatLng } from 'leaflet';
 
-import { GeocodingResult, nominatimClient } from '@/infrastructure/geocoding/nominatim-client';
-import { LatLng, osrmClient } from '@/infrastructure/routing/osrm-client';
+import { type GeocodingResult, nominatimClient } from '@/infrastructure/geocoding/nominatim-client';
+import { type LatLng, osrmClient } from '@/infrastructure/routing/osrm-client';
+import { cn } from '@/utilities/cn';
 
 const createIcon = (color: string) =>
   new Icon({
@@ -242,24 +249,16 @@ function SearchPanel({ onLocationSelect, placeholder, value, onChange }: SearchP
   };
 
   return (
-    <div className="relative">
-      <div className="relative">
-        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-        <input
-          type="text"
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onFocus={() => setShowSuggestions(true)}
-          onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
-          placeholder={placeholder}
-          className="w-full pl-10 pr-4 py-3 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition-all duration-200 bg-white/80 backdrop-blur-sm"
-        />
-        {isLoading && (
-          <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-            <div className="animate-spin rounded-full h-4 w-4 border-2 border-indigo-500 border-t-transparent"></div>
-          </div>
-        )}
-      </div>
+    <div className="w-full">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        onFocus={() => setShowSuggestions(true)}
+        onBlur={() => setTimeout(() => setShowSuggestions(false), 200)}
+        placeholder={placeholder}
+        className="w-full text-sm placeholder:text-black/50 text-black focus:outline-none"
+      />
 
       {showSuggestions && suggestions.length > 0 && (
         <div className="absolute top-full left-0 right-0 mt-1 bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl shadow-xl z-50 max-h-60 overflow-y-auto">
@@ -488,112 +487,100 @@ export default function UrbanNavigator() {
 
   return (
     <div className="flex h-screen bg-gray-50">
-      <div className="w-96 bg-white shadow-2xl z-[1001] flex flex-col">
-        <div className="p-6 border-b border-gray-100">
-          <div className="flex items-center gap-3 mb-2">
-            <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center">
-              <Route className="w-5 h-5 text-white" />
-            </div>
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">Urban Navigator</h1>
-              <p className="text-sm text-gray-500">Inteligentny planer podróży miejskich</p>
-            </div>
+      <div className="fixed left-4 top-4 h-[calc(100vh-2rem)] w-80 bg-[#F7F7F7]/50 shadow-2xl z-[1001] flex flex-col gap-y-6 rounded-[12px] border border-black/4 backdrop-blur-[50px] p-4">
+        <h1 className="text-xl font-medium text-black">Wyszukaj trasę</h1>
+
+        <div className="w-full h-px bg-black/8"></div>
+
+        <div className="flex gap-x-3">
+          <div className="flex-1 px-4 py-2.5 border border-black/12 rounded-lg flex items-center justify-center bg-white cursor-pointer">
+            <BusFront className="text-2xl text-black" />
+          </div>
+
+          <div className="flex-1 px-4 py-2.5 border border-black/12 bg-[#eeeeee] rounded-lg flex items-center justify-center cursor-pointer">
+            <TramFront className="text-2xl text-black/30" />
+          </div>
+
+          <div className="flex-1 px-4 py-2.5 border border-black/12 bg-[#eeeeee] rounded-lg flex items-center justify-center cursor-pointer">
+            <Bike className="text-2xl text-black/30" />
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          <div className="p-6 space-y-6">
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                Środek transportu
-              </h3>
-              <div className="grid grid-cols-1 gap-3">
-                {transportModes.map((mode) => (
-                  <button
-                    key={mode.id}
-                    onClick={() => setSelectedTransport(mode.id as any)}
-                    className={`p-4 rounded-xl border-2 transition-all duration-200 ${
-                      selectedTransport === mode.id
-                        ? 'border-indigo-500 bg-indigo-50 shadow-md'
-                        : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                    }`}>
-                    <div className="flex items-center gap-3">
-                      <div
-                        className={`w-10 h-10 ${mode.color} rounded-lg flex items-center justify-center`}>
-                        <mode.icon className="w-5 h-5 text-white" />
-                      </div>
-                      <div className="text-left">
-                        <div className="font-medium text-gray-900">{mode.label}</div>
-                        <div className="text-sm text-gray-500">{mode.description}</div>
-                      </div>
-                    </div>
-                  </button>
+        <div className="flex flex-col gap-y-3">
+          <div className="relative rounded-lg p-2 bg-white flex items-center gap-x-1.5">
+            <button
+              onClick={() => setClickMode(clickMode === 'start' ? null : 'start')}
+              className="p-1 rounded hover:bg-[#eeeeee] transition-colors duration-200">
+              <Pin className="size-4 text-[#408333]" />
+            </button>
+
+            <SearchPanel
+              onLocationSelect={handleStartLocationSelect}
+              placeholder="Wyszukaj punkt startowy..."
+              value={searchStart}
+              onChange={setSearchStart}
+            />
+          </div>
+
+          <div className="relative rounded-lg p-2 bg-white flex items-center gap-x-1.5">
+            <button
+              onClick={() => setClickMode(clickMode === 'end' ? null : 'end')}
+              className="p-1 rounded hover:bg-[#eeeeee] transition-colors duration-200">
+              <FlagTriangleRight className="size-4 text-[#2B87E4]" />
+            </button>
+
+            <SearchPanel
+              onLocationSelect={handleEndLocationSelect}
+              placeholder="Wyszukaj punkt docelowy..."
+              value={searchEnd}
+              onChange={setSearchEnd}
+            />
+          </div>
+
+          <div className="relative rounded-lg p-2 bg-white flex items-center gap-x-1.5">
+            <button
+              onClick={() => setClickMode(clickMode === 'end' ? null : 'end')}
+              className="p-1 rounded hover:bg-[#eeeeee] transition-colors duration-200">
+              <Clock className="size-4 text-black" />
+            </button>
+
+            <input
+              type="datetime-local"
+              className="w-full text-sm text-black focus:outline-none"
+              defaultValue={new Date(new Date().getTime() + 2 * 60 * 60 * 1000)
+                .toISOString()
+                .slice(0, 16)}
+            />
+          </div>
+
+          <div className="flex justify-between items-center ">
+            <div className="flex gap-x-2">
+              <div className="flex rounded-full p-0.5 bg-white  ">
+                <div className="size-3" />
+                <div className="size-3 rounded-full bg-[#FFA633]" />
+              </div>
+
+              <p className="text-xs">bez przesiadek</p>
+            </div>
+
+            <div className="p-1 rounded hover:bg-[#eeeeee] transition-colors duration-200">
+              <Settings2 className="size-4 text-black" />
+            </div>
+          </div>
+        </div>
+        <p className="text-base">Sugerowane trasy</p>
+
+        <div className="flex-1 overflow-y-auto -mt-2">
+          <div className="flex flex-col gap-y-6">
+            <div className="flex flex-col gap-y-4">
+              <ul className="flex flex-col gap-y-3">
+                {PROPOSED_ROUTES.map((route, index) => (
+                  <SidebarRouteListItem key={index} {...route} />
                 ))}
-              </div>
+              </ul>
             </div>
 
-            <div className="space-y-4">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                Planowanie trasy
-              </h3>
-
-              <div className="space-y-4">
-                <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-3 h-3 bg-indigo-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-gray-700">Punkt startowy</span>
-                    <button
-                      onClick={() => setClickMode(clickMode === 'start' ? null : 'start')}
-                      className={`ml-auto px-3 py-1 text-xs rounded-lg transition-all duration-200 ${
-                        clickMode === 'start'
-                          ? 'bg-indigo-500 text-white shadow-md'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}>
-                      {clickMode === 'start' ? 'Anuluj' : 'Kliknij mapę'}
-                    </button>
-                  </div>
-                  <SearchPanel
-                    onLocationSelect={handleStartLocationSelect}
-                    placeholder="Wyszukaj punkt startowy..."
-                    value={searchStart}
-                    onChange={setSearchStart}
-                  />
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                    <span className="text-sm font-medium text-gray-700">Punkt docelowy</span>
-                    <button
-                      onClick={() => setClickMode(clickMode === 'end' ? null : 'end')}
-                      className={`ml-auto px-3 py-1 text-xs rounded-lg transition-all duration-200 ${
-                        clickMode === 'end'
-                          ? 'bg-red-500 text-white shadow-md'
-                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                      }`}>
-                      {clickMode === 'end' ? 'Anuluj' : 'Kliknij mapę'}
-                    </button>
-                  </div>
-                  <SearchPanel
-                    onLocationSelect={handleEndLocationSelect}
-                    placeholder="Wyszukaj punkt docelowy..."
-                    value={searchEnd}
-                    onChange={setSearchEnd}
-                  />
-                </div>
-              </div>
-
-              {(startPoint || endPoint) && (
-                <button
-                  onClick={clearRoute}
-                  className="w-full py-2 px-4 text-sm text-gray-600 hover:text-gray-800 transition-colors flex items-center justify-center gap-2">
-                  <X className="w-4 h-4" />
-                  Wyczyść trasę
-                </button>
-              )}
-            </div>
-
-            {routeInfo && (
+            {/*{routeInfo && (
               <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-100">
                 <div className="flex items-center gap-2 mb-3">
                   <Navigation className="w-5 h-5 text-indigo-600" />
@@ -723,7 +710,31 @@ export default function UrbanNavigator() {
                   </div>
                 </div>
               </div>
-            )}
+            )}*/}
+          </div>
+        </div>
+
+        <div className="rounded-lg p-3 border border-black/12 bg-[#FFF6EB] flex flex-col gap-y-4">
+          <div className="flex items-center gap-x-3">
+            <div className="size-9 rounded-full bg-orange-300 flex items-center justify-center text-xl text-white ">
+              N
+            </div>
+
+            <div className="flex flex-col gap-y-0">
+              <p className="text-sm">Natalia Brak</p>
+
+              <p className="text-xs text-black/40">natalia.brak@knmstudio.com</p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-y-2">
+            <div className="rounded-full w-full flex-none h-1.5  bg-black/12 relative">
+              <div className="rounded-full bg-[#FF9000] w-3/5 h-full" />
+            </div>
+
+            <p className="text-xs">
+              Do nagrody brakuje ci <span className="font-medium">20 punktów</span>!
+            </p>
           </div>
         </div>
       </div>
@@ -731,8 +742,8 @@ export default function UrbanNavigator() {
       <div className="flex-1 relative">
         <MapContainer center={krakowCenter} zoom={13} className="w-full h-full" zoomControl={false}>
           <TileLayer
-            url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+            attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           />
 
           <MapClickHandler onMapClick={handleMapClick} />
@@ -782,7 +793,7 @@ export default function UrbanNavigator() {
           />
         </MapContainer>
 
-        {!startPoint && !endPoint && (
+        {/*{!startPoint && !endPoint && (
           <div className="absolute bottom-6 left-6 right-6 z-[1000]">
             <div className="bg-white/95 backdrop-blur-sm border border-gray-200 rounded-xl p-4 text-center max-w-md mx-auto shadow-lg">
               <p className="text-sm text-gray-600">
@@ -791,8 +802,114 @@ export default function UrbanNavigator() {
               </p>
             </div>
           </div>
-        )}
+        )}*/}
       </div>
     </div>
   );
 }
+
+const PROPOSED_ROUTES = [
+  {
+    duration: 25,
+    tillDeparture: 5,
+    startTime: '12:53',
+    startStop: 'Nowy Kleparz',
+    endStop: 'Galeria Krakowska',
+    endTime: '13:15',
+    lineDirection: 'Rondo Mogilskie',
+    lineNumber: 3,
+  },
+  {
+    duration: 32,
+    tillDeparture: 20,
+    startTime: '13:08',
+    startStop: 'Plac Inwalidów',
+    endStop: 'Galeria Krakowska',
+    endTime: '13:40',
+    lineDirection: 'Wieliczka Kopalnia',
+    lineNumber: 125,
+  },
+  {
+    duration: 25,
+    tillDeparture: 55,
+    startTime: '13:43',
+    startStop: 'Nowy Kleparz',
+    endStop: 'Galeria Krakowska',
+    endTime: '14:05',
+    lineDirection: 'Rondo Mogilskie',
+    lineNumber: 3,
+  },
+];
+
+const SidebarRouteListItem: FC<{
+  duration: number;
+  tillDeparture: number;
+  startTime: string;
+  startStop: string;
+  endStop: string;
+  endTime: string;
+  lineDirection: string;
+  lineNumber: number;
+}> = ({
+  startTime,
+  startStop,
+  endStop,
+  endTime,
+  lineDirection,
+  lineNumber,
+  duration,
+  tillDeparture,
+}) => {
+  return (
+    <li className="group px-3 pt-3 pb-4 rounded-lg bg-white border first:border-[#FF9000] border-black/8 flex flex-col gap-y-6">
+      <div className="flex items-center justify-between">
+        <p className="flex items-end gap-x-1.5">
+          <span className="text-black/40 text-xs leading-4">Odjazd za</span>
+          <span className="text-lg font-medium leading-4.5">{tillDeparture} minut</span>
+        </p>
+
+        <p className="group-first:block hidden py-0.5 px-2 border border-[#FF9000] text-[#FF9000] rounded-full text-[11px]">
+          Polecane
+        </p>
+      </div>
+
+      <div className="flex flex-col gap-y-1.5">
+        <div className="flex items-center gap-x-1">
+          <p className="text-sm text-[#15AD12] w-11">{startTime}</p>
+
+          <div className="text-black/40">
+            <Pin className="size-3.5" />
+          </div>
+
+          <p className="pl-1 text-sm text-black">{startStop}</p>
+        </div>
+
+        <div className="flex items-center gap-x-1">
+          <div className="w-11 text-xs text-black/30">{duration} min</div>
+
+          <div className="w-3.5 flex items-center justify-center">
+            <div className="h-7.5 border-l border-dashed border-black/20" />
+          </div>
+
+          <p className="flex gap-x-1 items-center">
+            <div className="p-1 h-4 min-w-4 rounded-sm bg-[#FF9000] text-xs text-white flex items-center justify-center">
+              {lineNumber}
+            </div>
+
+            <span className="text-xs text-nowrap">{lineDirection}</span>
+          </p>
+        </div>
+
+        <div className="flex items-center gap-x-1">
+          <p className="text-sm text-[#15AD12] w-11">{endTime}</p>
+
+          <div className="size-3.5 flex items-center justify-center">
+            <div className="size-2 bg-orange-300 rounded-full" />
+          </div>
+
+          <p className="pl-1 text-sm text-black">{endStop}</p>
+        </div>
+      </div>
+    </li>
+  );
+};
