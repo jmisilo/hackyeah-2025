@@ -10,16 +10,47 @@ import {
 import { GTFSStop, krakowStops, krakowRoutes } from '../infrastructure/gtfs/gtfs-data';
 import { osrmClient } from '../infrastructure/routing/osrm-client';
 
+interface OSRMCacheEntry {
+  result: any;
+  timestamp: number;
+}
+
 export class MultiModalRoutingService {
   private static instance: MultiModalRoutingService;
   private maxWalkingDistance = 1000;
   private maxWalkingTime = 15; 
+  private osrmCache = new Map<string, OSRMCacheEntry>();
+  private cacheExpiryTime = 5 * 60 * 1000; 
 
   static getInstance(): MultiModalRoutingService {
     if (!MultiModalRoutingService.instance) {
       MultiModalRoutingService.instance = new MultiModalRoutingService();
     }
     return MultiModalRoutingService.instance;
+  }
+
+  private generateCacheKey(from: { lat: number; lng: number }, to: { lat: number; lng: number }, profile: string): string {
+    return `${from.lat.toFixed(6)},${from.lng.toFixed(6)}-${to.lat.toFixed(6)},${to.lng.toFixed(6)}-${profile}`;
+  }
+
+  private async getCachedOSRMRoute(from: { lat: number; lng: number }, to: { lat: number; lng: number }, profile: 'walking' | 'driving' = 'walking') {
+    const cacheKey = this.generateCacheKey(from, to, profile);
+    const cached = this.osrmCache.get(cacheKey);
+    
+    if (cached && (Date.now() - cached.timestamp) < this.cacheExpiryTime) {
+      console.log(`🎯 Cache hit for OSRM route: ${profile}`);
+      return cached.result;
+    }
+
+    try {
+      const result = await osrmClient.getRoute(from, to, profile);
+      this.osrmCache.set(cacheKey, { result, timestamp: Date.now() });
+      console.log(`📡 OSRM request completed and cached: ${profile}`);
+      return result;
+    } catch (error) {
+      console.error(`❌ OSRM request failed: ${profile}`, error);
+      return null;
+    }
   }
 
   async planRoute(request: RoutingRequest): Promise<RoutingResponse> {
@@ -36,16 +67,16 @@ export class MultiModalRoutingService {
       };
       const finalPreferences = preferences || defaultPreferences;
       
+      const maxStopsToCheck = 3; 
       
-      let nearbyStartStops = this.findNearbyStops(start, finalPreferences, transportModes);
-      let nearbyEndStops = this.findNearbyStops(end, finalPreferences, transportModes);
+      let nearbyStartStops = this.findNearbyStops(start, finalPreferences, transportModes).slice(0, maxStopsToCheck);
+      let nearbyEndStops = this.findNearbyStops(end, finalPreferences, transportModes).slice(0, maxStopsToCheck);
 
       console.log('📊 Initial search results:', {
         startStops: nearbyStartStops.length,
         endStops: nearbyEndStops.length
       });
 
-      
       if (nearbyStartStops.length === 0 || nearbyEndStops.length === 0) {
         console.log('🔄 No stops found, increasing walking distance...');
         const originalMaxDistance = this.maxWalkingDistance;
@@ -54,20 +85,18 @@ export class MultiModalRoutingService {
         this.maxWalkingDistance = 1500; 
         this.maxWalkingTime = 20; 
         
-        nearbyStartStops = this.findNearbyStops(start, finalPreferences, transportModes);
-        nearbyEndStops = this.findNearbyStops(end, finalPreferences, transportModes);
+        nearbyStartStops = this.findNearbyStops(start, finalPreferences, transportModes).slice(0, maxStopsToCheck);
+        nearbyEndStops = this.findNearbyStops(end, finalPreferences, transportModes).slice(0, maxStopsToCheck);
         
         console.log('📊 Extended search results:', {
           startStops: nearbyStartStops.length,
           endStops: nearbyEndStops.length
         });
         
-        
         this.maxWalkingDistance = originalMaxDistance;
         this.maxWalkingTime = originalMaxTime;
       }
 
-      
       if (nearbyStartStops.length === 0 || nearbyEndStops.length === 0) {
         console.log('🔄 Still no stops, trying all transport modes...');
         const allTransportModes: ('walking' | 'bus' | 'tram')[] = ['walking', 'bus', 'tram'];
@@ -75,14 +104,13 @@ export class MultiModalRoutingService {
         this.maxWalkingDistance = 2000; 
         this.maxWalkingTime = 25; 
         
-        nearbyStartStops = this.findNearbyStops(start, finalPreferences, allTransportModes);
-        nearbyEndStops = this.findNearbyStops(end, finalPreferences, allTransportModes);
+        nearbyStartStops = this.findNearbyStops(start, finalPreferences, allTransportModes).slice(0, maxStopsToCheck);
+        nearbyEndStops = this.findNearbyStops(end, finalPreferences, allTransportModes).slice(0, maxStopsToCheck);
         
         console.log('📊 All-modes search results:', {
           startStops: nearbyStartStops.length,
           endStops: nearbyEndStops.length
         });
-        
         
         this.maxWalkingDistance = 1000;
         this.maxWalkingTime = 15;
@@ -214,26 +242,40 @@ export class MultiModalRoutingService {
     endStops: Array<{ stop: GTFSStop; distance: number; walkingTime: number }>,
     preferences: RoutingPreferences
   ): Promise<MultiModalRoute> {
-    let bestRoute: MultiModalRoute | null = null;
-    let bestScore = Infinity;
+    const routePromises: Promise<{ route: MultiModalRoute | null; score: number }>[] = [];
 
     for (const startStopData of startStops) {
       for (const endStopData of endStops) {
-        const route = await this.planRouteViaStops(
+        const routePromise = this.planRouteViaStops(
           from, 
           to, 
           startStopData, 
           endStopData, 
           preferences
-        );
-
-        if (route) {
-          const score = this.calculateRouteScore(route, preferences);
-          if (score < bestScore) {
-            bestScore = score;
-            bestRoute = route;
+        ).then(route => {
+          if (route) {
+            const score = this.calculateRouteScore(route, preferences);
+            return { route, score };
           }
-        }
+          return { route: null, score: Infinity };
+        }).catch(error => {
+          console.error('Error planning route via stops:', error);
+          return { route: null, score: Infinity };
+        });
+        
+        routePromises.push(routePromise);
+      }
+    }
+
+    const results = await Promise.all(routePromises);
+    
+    let bestRoute: MultiModalRoute | null = null;
+    let bestScore = Infinity;
+
+    for (const result of results) {
+      if (result.route && result.score < bestScore) {
+        bestScore = result.score;
+        bestRoute = result.route;
       }
     }
 
@@ -309,21 +351,18 @@ export class MultiModalRoutingService {
     to: { lat: number; lng: number }
   ): Promise<WalkingSegment | null> {
     try {
-      
-      const walkingRoute = await osrmClient.getRoute(from, to, 'walking');
+      const walkingRoute = await this.getCachedOSRMRoute(from, to, 'walking');
       
       let distance: number;
       let duration: number;
       let geometry: [number, number][];
 
       if (walkingRoute?.routes?.[0]) {
-        
         distance = walkingRoute.routes[0].distance;
         duration = Math.ceil(walkingRoute.routes[0].duration / 60); 
         geometry = walkingRoute.routes[0].geometry.coordinates;
         console.log(`🚶 Segment pieszy z OSRM: dystans=${distance.toFixed(0)}m, czas=${duration}min`);
       } else {
-        
         distance = this.calculateDistance(from, to);
         duration = this.estimateWalkingTime(distance);
         geometry = this.createStraightLineGeometry(from, to);
