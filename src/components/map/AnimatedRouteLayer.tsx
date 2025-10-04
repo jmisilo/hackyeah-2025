@@ -326,7 +326,6 @@ export const AnimatedRouteLayer: React.FC<AnimatedRouteLayerProps> = ({
           className="absolute bottom-4 left-1/2 transform -translate-x-1/2 z-[1000]"
         >
           <div className="bg-white rounded-lg shadow-lg p-4 flex items-center space-x-4">
-            {/* Pasek postępu */}
             <div className="flex-1 min-w-[200px]">
               <div className="flex justify-between text-xs text-gray-600 mb-1">
                 <span>Postęp trasy</span>
@@ -340,7 +339,6 @@ export const AnimatedRouteLayer: React.FC<AnimatedRouteLayerProps> = ({
               </div>
             </div>
 
-            {/* Informacje o aktualnym segmencie */}
             {route.segments[currentSegmentIndex] && (
               <div className="text-sm">
                 <div className="font-medium">
@@ -353,7 +351,6 @@ export const AnimatedRouteLayer: React.FC<AnimatedRouteLayerProps> = ({
               </div>
             )}
 
-            {/* Przyciski kontroli */}
             <div className="flex space-x-2">
               <button
                 onClick={startAnimation}

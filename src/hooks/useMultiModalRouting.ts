@@ -52,6 +52,7 @@ export function useMultiModalRouting(): RoutingHookReturn {
   const clearRoute = useCallback(() => {
     setState(prev => ({
       ...prev,
+      isLoading: false,
       currentRoute: null,
       alternatives: [],
       error: null,

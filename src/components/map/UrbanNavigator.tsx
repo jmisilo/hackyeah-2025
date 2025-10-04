@@ -1,7 +1,7 @@
 'use client';
 
 import { Bus, Train } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 import { Icon, LatLng as LeafletLatLng } from 'leaflet';
@@ -13,7 +13,10 @@ import { type LatLng, osrmClient } from '@/infrastructure/routing/osrm-client';
 
 import { AnimatedRouteLayer } from './AnimatedRouteLayer';
 import { EnhancedStopMarker } from './EnhancedStopMarker';
+import { RouteSearchLoader } from './RouteSearchLoader';
 import { VehicleTracker } from './VehicleTracker';
+import { VehicleDetailsModal } from './VehicleDetailsModal';
+import { StopDetailsModal } from './StopDetailsModal';
 import { Sidebar } from './sidebar';
 
 const createIcon = (color: string) =>
@@ -335,6 +338,8 @@ export default function UrbanNavigator() {
 
   const [selectedStop, setSelectedStop] = useState<GTFSStop | null>(null);
   const [showStopDetails, setShowStopDetails] = useState(false);
+  const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
+  const [showVehicleDetails, setShowVehicleDetails] = useState(false);
   const [transportFilter, setTransportFilter] = useState<'all' | 'bus' | 'tram' | 'both'>('all');
   const [showVehicles, setShowVehicles] = useState(true);
   const [showStops, setShowStops] = useState(true);
@@ -370,13 +375,23 @@ export default function UrbanNavigator() {
   const handleStopClick = (stop: GTFSStop) => {
     setSelectedStop(stop);
     setShowStopDetails(true);
+    setShowVehicleDetails(false);
   };
 
+  const handleVehicleClick = useCallback((vehicle: any) => {
+    setSelectedVehicle(vehicle);
+    setShowVehicleDetails(true);
+    setShowStopDetails(false);
+  }, []);
+
   const handlePlanRouteToStop = (stop: GTFSStop) => {
+    clearCurrentRoute();
+    
     if (startPoint) {
       setEndPoint({ lat: stop.lat, lng: stop.lng });
       setEndName(stop.name);
       setSearchEnd(stop.name);
+      
       handlePlanRoute();
     } else {
       setStartPoint({ lat: stop.lat, lng: stop.lng });
@@ -541,7 +556,9 @@ export default function UrbanNavigator() {
             <VehicleTracker
               bounds={mapBounds}
               lineFilter={transportFilter === 'all' ? undefined : [transportFilter]}
-              onVehicleClick={(vehicle) => console.log('Vehicle clicked:', vehicle)}
+              onVehicleClick={handleVehicleClick}
+              showStops={showStops}
+              onToggleStops={() => setShowStops(!showStops)}
             />
           )}
 
@@ -577,6 +594,21 @@ export default function UrbanNavigator() {
             />
           )}
         </MapContainer>
+        
+        <RouteSearchLoader isVisible={routeLoading} />
+        
+        <VehicleDetailsModal
+          vehicle={selectedVehicle}
+          isVisible={showVehicleDetails}
+          onClose={() => setShowVehicleDetails(false)}
+        />
+        
+        <StopDetailsModal
+          stop={selectedStop}
+          isVisible={showStopDetails}
+          onClose={() => setShowStopDetails(false)}
+          onPlanRoute={handlePlanRouteToStop}
+        />
       </div>
     </div>
   );

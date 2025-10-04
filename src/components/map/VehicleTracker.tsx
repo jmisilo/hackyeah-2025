@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { VehicleMarker, VehicleClusterMarker } from './VehicleMarker';
 import { useVehicleTracking } from '../../hooks/useVehicleTracking';
 import { VehiclePosition, VehicleCluster } from '../../types/vehicle.types';
-import { Settings, Eye, EyeOff, Filter } from 'lucide-react';
+import { Settings, Eye, EyeOff, Filter, MapPin } from 'lucide-react';
 
 interface VehicleTrackerProps {
   bounds?: {
@@ -19,6 +19,8 @@ interface VehicleTrackerProps {
   clusterDistance?: number;
   onVehicleClick?: (vehicle: VehiclePosition) => void;
   onVehicleClusterClick?: (vehicles: VehiclePosition[]) => void;
+  showStops?: boolean;
+  onToggleStops?: () => void;
 }
 
 export const VehicleTracker: React.FC<VehicleTrackerProps> = ({
@@ -28,7 +30,9 @@ export const VehicleTracker: React.FC<VehicleTrackerProps> = ({
   showClustering = true,
   clusterDistance = 50,
   onVehicleClick,
-  onVehicleClusterClick
+  onVehicleClusterClick,
+  showStops = true,
+  onToggleStops
 }) => {
   const map = useMap();
   const [isVisible, setIsVisible] = useState(true);
@@ -180,7 +184,7 @@ export const VehicleTracker: React.FC<VehicleTrackerProps> = ({
 
   return (
     <>
-      <div className="absolute top-4 right-4 z-[1000]">
+      <div className="absolute bottom-4 right-4 z-[1000]">
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
@@ -198,6 +202,20 @@ export const VehicleTracker: React.FC<VehicleTrackerProps> = ({
             >
               {isVisible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
             </button>
+
+            {onToggleStops && (
+              <button
+                onClick={onToggleStops}
+                className={`p-2 rounded-lg mr-2 transition-colors ${
+                  showStops 
+                    ? 'bg-purple-100 text-purple-600 hover:bg-purple-200' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+                title={showStops ? 'Ukryj przystanki' : 'Pokaż przystanki'}
+              >
+                <MapPin className="w-4 h-4" />
+              </button>
+            )}
 
             <button
               onClick={() => setShowControls(!showControls)}
