@@ -5,6 +5,9 @@ import { Geist } from 'next/font/google';
 
 import { type FC, type PropsWithChildren } from 'react';
 
+import { Toaster } from 'sonner';
+
+import { ModalContextProvider } from '@/ui/modal';
 import { cn } from '@/utilities/cn';
 import * as env from '@/utilities/env';
 
@@ -32,7 +35,11 @@ const RootLayout: FC<PropsWithChildren> = async ({ children }) => {
         </head>
       )}
 
-      <body className={cn(geist.className, 'bg-')}>{children}</body>
+      <body className={cn(geist.className, 'bg-')}>
+        <ModalContextProvider>{children}</ModalContextProvider>
+
+        <Toaster position="top-right" theme="light" closeButton richColors />
+      </body>
     </html>
   );
 };

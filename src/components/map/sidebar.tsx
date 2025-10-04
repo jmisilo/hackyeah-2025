@@ -14,6 +14,8 @@ type SidebarProps = {
   setSearchStart: Dispatch<SetStateAction<string>>;
   searchEnd: string;
   setSearchEnd: Dispatch<SetStateAction<string>>;
+  startPoint: LatLng | null;
+  endPoint: LatLng | null;
 };
 
 export const Sidebar: FC<SidebarProps> = ({
@@ -25,6 +27,8 @@ export const Sidebar: FC<SidebarProps> = ({
   setSearchStart,
   searchEnd,
   setSearchEnd,
+  startPoint,
+  endPoint,
 }) => {
   return (
     <aside className="fixed left-4 top-4 h-[calc(100vh-2rem)] w-80 bg-[#F7F7F7]/50 shadow-2xl z-[1001] flex flex-col gap-y-6 rounded-[12px] border border-black/4 backdrop-blur-[50px] p-4">
@@ -108,11 +112,12 @@ export const Sidebar: FC<SidebarProps> = ({
           </div>
         </div>
       </div>
-      {!!searchStart && !!searchEnd && <p className="text-base">Sugerowane trasy</p>}
+
+      {!!startPoint?.lat && !!endPoint?.lat && <p className="text-base">Sugerowane trasy</p>}
 
       <ul className="flex-1 overflow-y-auto -mt-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-black/30 scrollbar-track-rounded-full flex flex-col gap-y-3">
-        {!!searchStart &&
-          !!searchEnd &&
+        {!!startPoint?.lat &&
+          !!endPoint?.lat &&
           PROPOSED_ROUTES.map((route, index) => <SidebarRouteListItem key={index} {...route} />)}
       </ul>
 
@@ -193,13 +198,13 @@ const SidebarRouteListItem: FC<{
             <div className="h-7.5 border-l border-dashed border-black/20" />
           </div>
 
-          <p className="flex gap-x-1 items-center">
+          <div className="flex gap-x-1 items-center">
             <div className="p-1 h-4 min-w-4 rounded-sm bg-[#FF9000] text-xs text-white flex items-center justify-center">
               {lineNumber}
             </div>
 
             <span className="text-xs text-nowrap">{lineDirection}</span>
-          </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-x-1">

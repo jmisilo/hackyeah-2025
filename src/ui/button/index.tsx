@@ -32,9 +32,9 @@ export const Button: FC<ButtonProps> = (props) => {
   const { className, href, theme = ButtonTheme.Primary } = props;
 
   const btnStyle = cn(
-    'px-3 py-1.5 transition-all duration-200 ease-in-out text-sm font-medium disabled:cursor-not-allowed active:scale-95',
+    'px-3 py-2 transition-all duration-200 ease-in-out text-sm font-medium disabled:cursor-not-allowed active:scale-95 rounded-lg cursor-pointer',
     {
-      '': theme === ButtonTheme.Primary,
+      'bg-[#131313] text-white': theme === ButtonTheme.Primary,
     },
     className,
   );

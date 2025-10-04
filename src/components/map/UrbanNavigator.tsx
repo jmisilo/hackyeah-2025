@@ -1,22 +1,33 @@
 'use client';
 
-import { Bus, Train } from 'lucide-react';
+import {
+  Bus,
+  CircleQuestionMark,
+  Clock,
+  Hourglass,
+  MoveRight,
+  Pin,
+  Plus,
+  Train,
+} from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 import { Icon, LatLng as LeafletLatLng } from 'leaflet';
+import { toast } from 'sonner';
 
 import { useMultiModalRouting } from '@/hooks/useMultiModalRouting';
-import { useVehicleTracking } from '@/hooks/useVehicleTracking';
 import { type GTFSStop, krakowStops } from '@/infrastructure/gtfs/gtfs-data';
 import { type LatLng, osrmClient } from '@/infrastructure/routing/osrm-client';
+import { Button } from '@/ui/button';
+import { Modal, useModal } from '@/ui/modal';
 
 import { AnimatedRouteLayer } from './AnimatedRouteLayer';
 import { EnhancedStopMarker } from './EnhancedStopMarker';
 import { RouteSearchLoader } from './RouteSearchLoader';
-import { VehicleTracker } from './VehicleTracker';
-import { VehicleDetailsModal } from './VehicleDetailsModal';
 import { StopDetailsModal } from './StopDetailsModal';
+import { VehicleDetailsModal } from './VehicleDetailsModal';
+import { VehicleTracker } from './VehicleTracker';
 import { Sidebar } from './sidebar';
 
 const createIcon = (color: string) =>
@@ -327,6 +338,7 @@ const createTransportRoute = async (startStop: any, endStop: any): Promise<any> 
 };
 
 export default function UrbanNavigator() {
+  const [disabled, setDisabled] = useState(false);
   const [startPoint, setStartPoint] = useState<LatLng | null>(null);
   const [endPoint, setEndPoint] = useState<LatLng | null>(null);
   const [startName, setStartName] = useState('');
@@ -346,6 +358,8 @@ export default function UrbanNavigator() {
   const [animateRoute, setAnimateRoute] = useState(true);
   const [mapBounds, setMapBounds] = useState<any>(null);
 
+  const { openModal, closeModal } = useModal();
+
   const {
     planRoute,
     currentRoute,
@@ -353,8 +367,6 @@ export default function UrbanNavigator() {
     error: routeError,
     clearRoute: clearCurrentRoute,
   } = useMultiModalRouting();
-
-  const { vehicles, isConnected: vehiclesConnected, error: vehicleError } = useVehicleTracking();
 
   const krakowCenter: [number, number] = [50.0647, 19.945];
 
@@ -386,12 +398,12 @@ export default function UrbanNavigator() {
 
   const handlePlanRouteToStop = (stop: GTFSStop) => {
     clearCurrentRoute();
-    
+
     if (startPoint) {
       setEndPoint({ lat: stop.lat, lng: stop.lng });
       setEndName(stop.name);
       setSearchEnd(stop.name);
-      
+
       handlePlanRoute();
     } else {
       setStartPoint({ lat: stop.lat, lng: stop.lng });
@@ -401,7 +413,7 @@ export default function UrbanNavigator() {
     setShowStopDetails(false);
   };
 
-  const handlePlanRoute = async () => {
+  const handlePlanRoute = useCallback(async () => {
     if (!startPoint || !endPoint) return;
 
     try {
@@ -426,13 +438,13 @@ export default function UrbanNavigator() {
     } catch (error) {
       console.error('Błąd podczas planowania trasy:', error);
     }
-  };
+  }, [startPoint, endPoint, selectedTransport, planRoute]);
 
   useEffect(() => {
     if (startPoint && endPoint) {
       handlePlanRoute();
     }
-  }, [startPoint, endPoint, selectedTransport]);
+  }, [startPoint, handlePlanRoute, endPoint, selectedTransport]);
 
   const filteredStops = krakowStops.filter((stop) => {
     if (transportFilter === 'all') return true;
@@ -459,63 +471,8 @@ export default function UrbanNavigator() {
     }
   };
 
-  const clearRoute = () => {
-    try {
-      setStartPoint(null);
-      setEndPoint(null);
-      setStartName('');
-      setEndName('');
-      setSearchStart('');
-      setSearchEnd('');
-      clearCurrentRoute();
-    } catch (error) {
-      console.error('Błąd podczas czyszczenia trasy:', error);
-    }
-  };
-
-  const formatDuration = (seconds: number) => {
-    const minutes = Math.round(seconds / 60);
-    if (minutes < 60) return `${minutes} min`;
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return `${hours}h ${remainingMinutes}min`;
-  };
-
-  const formatDistance = (meters: number) => {
-    if (meters < 1000) return `${Math.round(meters)} m`;
-    return `${(meters / 1000).toFixed(1)} km`;
-  };
-
-  const transportModes = [
-    {
-      id: 'bus',
-      label: 'Autobus',
-      icon: Bus,
-      color: 'bg-orange-500',
-      description: 'Komunikacja autobusowa',
-    },
-    {
-      id: 'tram',
-      label: 'Tramwaj',
-      icon: Train,
-      color: 'bg-green-500',
-      description: 'Komunikacja tramwajowa',
-    },
-  ];
-
-  const currentGTFS = mockGTFSData[selectedTransport];
-  const relevantDisruptions =
-    mockDisruptions?.filter((d) =>
-      d?.affectedLines?.some((line) => line?.toLowerCase().includes(selectedTransport)),
-    ) || [];
-
-  const totalStops = filteredStops.length;
-  const connectedVehicles = vehicles.length;
-  const isLoading = routeLoading;
-  const error = routeError || vehicleError;
-
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-gray-50 relative">
       <Sidebar
         setClickMode={setClickMode}
         clickMode={clickMode}
@@ -525,7 +482,87 @@ export default function UrbanNavigator() {
         setSearchStart={setSearchStart}
         searchEnd={searchEnd}
         setSearchEnd={setSearchEnd}
+        startPoint={startPoint}
+        endPoint={endPoint}
       />
+
+      <Button
+        className="flex gap-x-2 items-center fixed top-4 right-4 z-1000 rounded-lg cursor-pointer"
+        onClick={() =>
+          openModal(
+            <>
+              <Modal.Header title="Zgłoś opóźnienie"></Modal.Header>
+
+              <Modal.Content>
+                <div className="flex flex-col gap-y-4">
+                  <label className="py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg">
+                    <CircleQuestionMark className="text-black/50" />
+
+                    <input
+                      className="text-black/50 placeholder:text-black/70 focus:outline-none w-full "
+                      placeholder="Wybierz rodzaj uniedogodnienia"
+                    />
+                  </label>
+
+                  <label className="py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg">
+                    <Hourglass className="text-black/50" />
+
+                    <input
+                      className="text-black/50 placeholder:text-black/70 focus:outline-none w-full "
+                      placeholder="Jaki jest czas opóźnienia?"
+                    />
+                  </label>
+
+                  <label className="py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg">
+                    <Pin className="text-black/50" />
+
+                    <input
+                      className="text-black/50 placeholder:text-black/70 focus:outline-none w-full "
+                      placeholder="Gdzie?"
+                    />
+                  </label>
+
+                  <label className="py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg">
+                    <Clock className="text-black/50" />
+
+                    <input
+                      className="text-black/50 placeholder:text-black/70 focus:outline-none w-full "
+                      placeholder="Kiedy nastąpiło wydarzenie?"
+                    />
+                  </label>
+
+                  <textarea
+                    placeholder="Dodatkowe informacje..."
+                    className="resize-none py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg"
+                    rows={3}
+                  />
+
+                  <Button
+                    disabled={disabled}
+                    className="bg-[#FFA633] disabled:opacity-5 flex items-center justify-center gap-x-2"
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      setDisabled(true);
+
+                      await new Promise((resolve) => setTimeout(resolve, 500));
+
+                      toast.success('Dziękujemy za zgłoszenie!');
+
+                      await new Promise((resolve) => setTimeout(resolve, 100));
+
+                      closeModal();
+
+                      setDisabled(false);
+                    }}>
+                    Wyślij zgłoszenie <MoveRight className="size-6" />
+                  </Button>
+                </div>
+              </Modal.Content>
+            </>,
+          )
+        }>
+        Zgłoś utrudnienie <Plus className="size-4.5" />
+      </Button>
 
       <div className="flex-1 relative">
         <MapContainer
@@ -594,15 +631,15 @@ export default function UrbanNavigator() {
             />
           )}
         </MapContainer>
-        
+
         <RouteSearchLoader isVisible={routeLoading} />
-        
+
         <VehicleDetailsModal
           vehicle={selectedVehicle}
           isVisible={showVehicleDetails}
           onClose={() => setShowVehicleDetails(false)}
         />
-        
+
         <StopDetailsModal
           stop={selectedStop}
           isVisible={showStopDetails}
