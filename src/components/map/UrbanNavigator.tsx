@@ -5,16 +5,21 @@ import {
   Bus,
   Calendar,
   Clock,
+  Filter,
   MapIcon,
   MapPin,
   MessageCircle,
   Navigation,
   Route,
   Search,
-  Star,
+  Settings,
   Train,
   Users,
   X,
+  Eye,
+  EyeOff,
+  Layers,
+  Zap
 } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
@@ -23,6 +28,18 @@ import { Icon, LatLng as LeafletLatLng } from 'leaflet';
 
 import { GeocodingResult, nominatimClient } from '@/infrastructure/geocoding/nominatim-client';
 import { LatLng, osrmClient } from '@/infrastructure/routing/osrm-client';
+import { GTFSStop, krakowStops, getStopsByType, getStopsInBounds } from '@/infrastructure/gtfs/gtfs-data';
+import { MultiModalRoute } from '@/types/routing.types';
+import { VehiclePosition } from '@/types/vehicle.types';
+
+
+import { VehicleTracker } from './VehicleTracker';
+import { EnhancedStopMarker } from './EnhancedStopMarker';
+import { AnimatedRouteLayer } from './AnimatedRouteLayer';
+import { StopDetailsPanel } from './StopDetailsPanel';
+import { useVehicleTracking } from '@/hooks/useVehicleTracking';
+import { useMultiModalRouting } from '@/hooks/useMultiModalRouting';
+import LiveChat from '@/components/chat/LiveChat';
 
 const createIcon = (color: string) =>
   new Icon({
@@ -63,7 +80,7 @@ function RouteLayer({ start, end, transportMode, onRouteCalculated }: RouteLayer
 
     const calculateMultiModalRoute = async () => {
       try {
-        const maxWalkingDistance = 500; // 500 meters
+        const maxWalkingDistance = 500; 
         const startStop = findNearestStop(start, maxWalkingDistance);
         const endStop = findNearestStop(end, maxWalkingDistance);
 
@@ -72,42 +89,55 @@ function RouteLayer({ start, end, transportMode, onRouteCalculated }: RouteLayer
         let totalDistance = 0;
 
         if (startStop && endStop && startStop.id !== endStop.id) {
-          // Multi-modal route: walk -> transport -> walk
-          // Walk to start stop
+          
+          
           const walkToStart = await osrmClient.getRouteGeoJSON(start, {
             lat: startStop.lat,
             lng: startStop.lng,
           });
-          walkToStart.properties.type = 'walking';
-          walkToStart.properties.description = `Pieszo do przystanku ${startStop.name}`;
+          
+          const walkToStartMeta = {
+            type: 'walking',
+            description: `Pieszo do przystanku ${startStop.name}`
+          };
           segments.push(walkToStart);
           totalDuration += walkToStart.properties.duration;
           totalDistance += walkToStart.properties.distance;
 
-          // Transport between stops
+          
           const transportRoute = await createTransportRoute(startStop, endStop);
 
-          transportRoute.properties.description = `${transportMode === 'bus' ? 'Autobusem' : 'Tramwajem'} ${startStop.name} → ${endStop.name}`;
+          
+          const transportRouteMeta = {
+            type: 'transport',
+            description: `${transportMode === 'bus' ? 'Autobusem' : 'Tramwajem'} ${startStop.name} → ${endStop.name}`
+          };
           segments.push(transportRoute);
 
           totalDuration += transportRoute.properties.duration;
           totalDistance += transportRoute.properties.distance;
 
-          // Walk from end stop to destination
+          
           const walkFromEnd = await osrmClient.getRouteGeoJSON(
             { lat: endStop.lat, lng: endStop.lng },
             end,
           );
-          walkFromEnd.properties.type = 'walking';
-          walkFromEnd.properties.description = `Pieszo z przystanku ${endStop.name}`;
+          
+          const walkFromEndMeta = {
+            type: 'walking',
+            description: `Pieszo z przystanku ${endStop.name}`
+          };
           segments.push(walkFromEnd);
           totalDuration += walkFromEnd.properties.duration;
           totalDistance += walkFromEnd.properties.distance;
         } else {
-          // Pure walking route
+          
           const walkingRoute = await osrmClient.getRouteGeoJSON(start, end);
-          walkingRoute.properties.type = 'walking';
-          walkingRoute.properties.description = 'Cała trasa pieszo';
+          
+          const walkingRouteMeta = {
+            type: 'walking',
+            description: 'Cała trasa pieszo'
+          };
           segments.push(walkingRoute);
           totalDuration = walkingRoute.properties.duration;
           totalDistance = walkingRoute.properties.distance;
@@ -123,22 +153,24 @@ function RouteLayer({ start, end, transportMode, onRouteCalculated }: RouteLayer
         setRouteSegments(segments);
         onRouteCalculated?.(routeInfo);
 
-        // Fit bounds to all segments
+        
         const allCoordinates: [number, number][] = [];
-        segments.forEach((segment) => {
+        segments.forEach((segment: any) => {
           segment.geometry.coordinates.forEach((coord: [number, number]) => {
             allCoordinates.push(coord);
           });
         });
 
         if (allCoordinates.length > 0) {
-          const bounds = allCoordinates.reduce((bounds: any, coord: [number, number]) => {
-            return bounds.extend([coord[1], coord[0]]);
-          }, new LeafletLatLng(allCoordinates[0][1], allCoordinates[0][0]).toBounds(100));
+          const latLngs = allCoordinates.map(coord => new LeafletLatLng(coord[1], coord[0]));
+          const bounds = new (window as any).L.LatLngBounds(latLngs);
           map.fitBounds(bounds, { padding: [20, 20] });
         }
       } catch (error) {
-        console.error('Error calculating route:', error);
+        console.error('Błąd podczas obliczania trasy:', error);
+        if (onRouteCalculated) {
+          onRouteCalculated(null);
+        }
       }
     };
 
@@ -150,7 +182,7 @@ function RouteLayer({ start, end, transportMode, onRouteCalculated }: RouteLayer
 
     const layers: any[] = [];
 
-    routeSegments.forEach((segment, index) => {
+    routeSegments.forEach((segment: any, index: number) => {
       const color =
         segment.properties.type === 'walking' ? '#6b7280' : getRouteColor(transportMode);
       const weight = segment.properties.type === 'walking' ? 3 : 5;
@@ -184,6 +216,25 @@ function MapClickHandler({ onMapClick }: MapClickHandlerProps) {
   useMapEvents({
     click: (e) => {
       onMapClick({ lat: e.latlng.lat, lng: e.latlng.lng });
+    },
+  });
+  return null;
+}
+
+interface MapEventHandlerProps {
+  onMoveEnd: (bounds: { north: number; south: number; east: number; west: number }) => void;
+}
+
+function MapEventHandler({ onMoveEnd }: MapEventHandlerProps) {
+  useMapEvents({
+    moveend: (e) => {
+      const bounds = e.target.getBounds();
+      onMoveEnd({
+        north: bounds.getNorth(),
+        south: bounds.getSouth(),
+        east: bounds.getEast(),
+        west: bounds.getWest()
+      });
     },
   });
   return null;
@@ -346,7 +397,7 @@ const mockCommunityData = [
   },
 ];
 
-// Mock bus stops for Krakow
+
 const mockBusStops = [
   { id: 'stop1', name: 'Dworzec Główny', lat: 50.0647, lng: 19.945, lines: ['124', '152'] },
   { id: 'stop2', name: 'Teatr Bagatela', lat: 50.0672, lng: 19.9523, lines: ['124'] },
@@ -356,9 +407,9 @@ const mockBusStops = [
   { id: 'stop6', name: 'Kazimierz', lat: 50.0497, lng: 19.9445, lines: ['152'] },
 ];
 
-// Utility functions
+
 const calculateDistance = (point1: LatLng, point2: LatLng): number => {
-  const R = 6371e3; // Earth's radius in meters
+  const R = 6371e3; 
   const φ1 = (point1.lat * Math.PI) / 180;
   const φ2 = (point2.lat * Math.PI) / 180;
   const Δφ = ((point2.lat - point1.lat) * Math.PI) / 180;
@@ -388,33 +439,62 @@ const findNearestStop = (point: LatLng, maxDistance: number = 500): any => {
 };
 
 const createTransportRoute = async (startStop: any, endStop: any): Promise<any> => {
-  // Use OSRM for road-following transport route (mock - in real implementation, use GTFS shapes)
+  
   const route = await osrmClient.getRouteGeoJSON(
     { lat: startStop.lat, lng: startStop.lng },
     { lat: endStop.lat, lng: endStop.lng },
   );
 
-  // Override properties for transport segment
-  route.properties.type = 'transport';
-  route.properties.duration = 600; // Keep mock duration for transport
-  // Keep OSRM distance for now, or calculate actual transport distance later
+  
+  const transportRoute = {
+    ...route,
+    properties: {
+      ...route.properties,
+      duration: 600 
+    }
+  };
 
-  return route;
+  return transportRoute;
 };
 
 export default function UrbanNavigator() {
+  
   const [startPoint, setStartPoint] = useState<LatLng | null>(null);
   const [endPoint, setEndPoint] = useState<LatLng | null>(null);
   const [startName, setStartName] = useState('');
   const [endName, setEndName] = useState('');
   const [searchStart, setSearchStart] = useState('');
   const [searchEnd, setSearchEnd] = useState('');
-  const [routeInfo, setRouteInfo] = useState<any>(null);
   const [clickMode, setClickMode] = useState<'start' | 'end' | null>(null);
   const [selectedTransport, setSelectedTransport] = useState<'bus' | 'tram'>('bus');
+  
+  
+  const [selectedStop, setSelectedStop] = useState<GTFSStop | null>(null);
+  const [showStopDetails, setShowStopDetails] = useState(false);
+  const [transportFilter, setTransportFilter] = useState<'all' | 'bus' | 'tram' | 'both'>('all');
+  const [showVehicles, setShowVehicles] = useState(true);
+  const [showStops, setShowStops] = useState(true);
+  const [animateRoute, setAnimateRoute] = useState(true);
+  const [mapBounds, setMapBounds] = useState<any>(null);
+  
+  
+  const { 
+    planRoute, 
+    currentRoute, 
+    isLoading: routeLoading, 
+    error: routeError,
+    clearRoute: clearCurrentRoute
+  } = useMultiModalRouting();
+  
+  const {
+    vehicles,
+    isConnected: vehiclesConnected,
+    error: vehicleError
+  } = useVehicleTracking();
 
   const krakowCenter: [number, number] = [50.0647, 19.945];
 
+  
   const handleMapClick = (latlng: LatLng) => {
     if (clickMode === 'start') {
       setStartPoint(latlng);
@@ -429,26 +509,95 @@ export default function UrbanNavigator() {
     }
   };
 
+  
+  const handleStopClick = (stop: GTFSStop) => {
+    setSelectedStop(stop);
+    setShowStopDetails(true);
+  };
+
+  
+  const handlePlanRouteToStop = (stop: GTFSStop) => {
+    if (startPoint) {
+      setEndPoint({ lat: stop.lat, lng: stop.lng });
+      setEndName(stop.name);
+      setSearchEnd(stop.name);
+      handlePlanRoute();
+    } else {
+      setStartPoint({ lat: stop.lat, lng: stop.lng });
+      setStartName(stop.name);
+      setSearchStart(stop.name);
+    }
+    setShowStopDetails(false);
+  };
+
+  
+  const handlePlanRoute = async () => {
+    if (!startPoint || !endPoint) return;
+    
+    try {
+      await planRoute({
+        start: startPoint,
+        end: endPoint,
+        transportModes: selectedTransport === 'bus' ? ['bus'] : selectedTransport === 'tram' ? ['tram'] : ['bus', 'tram'],
+        maxWalkingDistance: 800,
+        preferences: {
+          minimizeWalking: false,
+          minimizeTransfers: true,
+          minimizeTime: false,
+          avoidStairs: false,
+          preferExpress: false
+        }
+      });
+    } catch (error) {
+      console.error('Błąd podczas planowania trasy:', error);
+    }
+  };
+
+  
+  useEffect(() => {
+    if (startPoint && endPoint) {
+      handlePlanRoute();
+    }
+  }, [startPoint, endPoint, selectedTransport]);
+
+  
+  const filteredStops = krakowStops.filter(stop => {
+    if (transportFilter === 'all') return true;
+    return stop.type === transportFilter;
+  });
+
   const handleStartLocationSelect = (location: LatLng, name: string) => {
-    setStartPoint(location);
-    setStartName(name);
-    setSearchStart(name.split(',')[0] || name);
+    try {
+      setStartPoint(location);
+      setStartName(name);
+      setSearchStart(name.split(',')[0] || name);
+    } catch (error) {
+      console.error('Błąd podczas ustawiania punktu startowego:', error);
+    }
   };
 
   const handleEndLocationSelect = (location: LatLng, name: string) => {
-    setEndPoint(location);
-    setEndName(name);
-    setSearchEnd(name.split(',')[0] || name);
+    try {
+      setEndPoint(location);
+      setEndName(name);
+      setSearchEnd(name.split(',')[0] || name);
+    } catch (error) {
+      console.error('Błąd podczas ustawiania punktu docelowego:', error);
+    }
   };
 
   const clearRoute = () => {
-    setStartPoint(null);
-    setEndPoint(null);
-    setStartName('');
-    setEndName('');
-    setSearchStart('');
-    setSearchEnd('');
-    setRouteInfo(null);
+    try {
+      setStartPoint(null);
+      setEndPoint(null);
+      setStartName('');
+      setEndName('');
+      setSearchStart('');
+      setSearchEnd('');
+      clearCurrentRoute();
+    } catch (error) {
+      console.error('Błąd podczas czyszczenia trasy:', error);
+    }
   };
 
   const formatDuration = (seconds: number) => {
@@ -482,9 +631,15 @@ export default function UrbanNavigator() {
   ];
 
   const currentGTFS = mockGTFSData[selectedTransport];
-  const relevantDisruptions = mockDisruptions.filter((d) =>
-    d.affectedLines.some((line) => line.toLowerCase().includes(selectedTransport)),
-  );
+  const relevantDisruptions = mockDisruptions?.filter((d) =>
+    d?.affectedLines?.some((line) => line?.toLowerCase().includes(selectedTransport)),
+  ) || [];
+
+  
+  const totalStops = filteredStops.length;
+  const connectedVehicles = vehicles.length;
+  const isLoading = routeLoading;
+  const error = routeError || vehicleError;
 
   return (
     <div className="flex h-screen bg-gray-50">
@@ -503,12 +658,89 @@ export default function UrbanNavigator() {
 
         <div className="flex-1 overflow-y-auto">
           <div className="p-6 space-y-6">
+
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-blue-800">Status systemu</h3>
+                <div className={`w-3 h-3 rounded-full ${vehiclesConnected ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-blue-600">{totalStops}</div>
+                  <div className="text-gray-600">Przystanków</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-2xl font-bold text-green-600">{connectedVehicles}</div>
+                  <div className="text-gray-600">Pojazdów online</div>
+                </div>
+              </div>
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide flex items-center">
+                <Filter className="w-4 h-4 mr-2" />
+                Filtry i ustawienia
+              </h3>
+              
+              <div>
+                <label className="text-sm font-medium text-gray-700 mb-2 block">Typ przystanków</label>
+                <select
+                  value={transportFilter}
+                  onChange={(e) => setTransportFilter(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                >
+                  <option value="all">Wszystkie przystanki</option>
+                  <option value="bus">Tylko autobusy</option>
+                  <option value="tram">Tylko tramwaje</option>
+                  <option value="both">Mieszane</option>
+                </select>
+              </div>
+
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Pojazdy na mapie</span>
+                  <button
+                    onClick={() => setShowVehicles(!showVehicles)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showVehicles ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                    }`}
+                  >
+                    {showVehicles ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
+                </div>
+                
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Przystanki</span>
+                  <button
+                    onClick={() => setShowStops(!showStops)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showStops ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                    }`}
+                  >
+                    {showStops ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                  </button>
+                </div>
+
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-gray-700">Animacje tras</span>
+                  <button
+                    onClick={() => setAnimateRoute(!animateRoute)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      animateRoute ? 'bg-green-100 text-green-600' : 'bg-gray-100 text-gray-400'
+                    }`}
+                  >
+                    {animateRoute ? <Zap className="w-4 h-4" /> : <Layers className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+            </div>
+
             <div className="space-y-4">
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
                 Środek transportu
               </h3>
               <div className="grid grid-cols-1 gap-3">
-                {transportModes.map((mode) => (
+                {transportModes && Array.isArray(transportModes) ? transportModes.map((mode) => (
                   <button
                     key={mode.id}
                     onClick={() => setSelectedTransport(mode.id as any)}
@@ -528,7 +760,9 @@ export default function UrbanNavigator() {
                       </div>
                     </div>
                   </button>
-                ))}
+                )) : (
+                  <div className="text-sm text-gray-500">Brak dostępnych środków transportu</div>
+                )}
               </div>
             </div>
 
@@ -593,7 +827,26 @@ export default function UrbanNavigator() {
               )}
             </div>
 
-            {routeInfo && (
+            {error && (
+              <div className="bg-gradient-to-br from-red-50 to-pink-50 rounded-xl p-4 border border-red-100 mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                  <span className="font-semibold text-red-800">Błąd</span>
+                </div>
+                <p className="text-sm text-red-700">{error}</p>
+              </div>
+            )}
+
+            {isLoading && (
+              <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-100 mb-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-5 h-5 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                  <span className="font-semibold text-blue-800">Ładowanie...</span>
+                </div>
+              </div>
+            )}
+
+            {currentRoute && (
               <div className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-xl p-4 border border-indigo-100">
                 <div className="flex items-center gap-2 mb-3">
                   <Navigation className="w-5 h-5 text-indigo-600" />
@@ -606,7 +859,7 @@ export default function UrbanNavigator() {
                       <span className="text-sm text-gray-600">Czas podróży</span>
                     </div>
                     <span className="font-semibold text-gray-900">
-                      {formatDuration(routeInfo.totalDuration)}
+                      {formatDuration(currentRoute.totalDuration)}
                     </span>
                   </div>
                   <div className="flex items-center justify-between">
@@ -615,21 +868,36 @@ export default function UrbanNavigator() {
                       <span className="text-sm text-gray-600">Dystans</span>
                     </div>
                     <span className="font-semibold text-gray-900">
-                      {formatDistance(routeInfo.totalDistance)}
+                      {formatDistance(currentRoute.totalDistance)}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-gray-600" />
+                      <span className="text-sm text-gray-600">Przesiadki</span>
+                    </div>
+                    <span className="font-semibold text-gray-900">
+                      {currentRoute.segments.filter(s => s.type === 'bus' || s.type === 'tram').length - 1}
                     </span>
                   </div>
                   <div className="mt-4">
                     <h4 className="text-sm font-semibold text-gray-700 mb-2">Etapy trasy:</h4>
                     <div className="space-y-2">
-                      {routeInfo.segments.map((segment: any, index: number) => (
+                      {currentRoute.segments.map((segment, index) => (
                         <div key={index} className="flex items-center gap-2 text-xs">
                           <div
                             className={`w-3 h-3 rounded-full ${
-                              segment.properties.type === 'walking' ? 'bg-gray-400' : 'bg-blue-500'
+                              segment.type === 'walking' ? 'bg-gray-400' : 
+                              (segment.type === 'bus' || segment.type === 'tram') ? 'bg-blue-500' : 'bg-green-500'
                             }`}></div>
-                          <span className="text-gray-600">{segment.properties.description}</span>
+                          <span className="text-gray-600">
+                            {segment.type === 'walking' ? 
+                              `Pieszo ${formatDistance(segment.distance)}` :
+                              `${segment.type} ${segment.lineNumber || ''} → Cel`
+                            }
+                          </span>
                           <span className="text-gray-500 ml-auto">
-                            {formatDuration(segment.properties.duration)}
+                            {formatDuration(segment.duration)}
                           </span>
                         </div>
                       ))}
@@ -637,91 +905,50 @@ export default function UrbanNavigator() {
                   </div>
                 </div>
 
-                <div className="bg-gradient-to-br from-blue-50 to-cyan-50 rounded-xl p-4 border border-blue-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Calendar className="w-5 h-5 text-blue-600" />
-                    <span className="font-semibold text-blue-800">
-                      Rozkład jazdy - Linia {currentGTFS.line}
-                    </span>
-                  </div>
-                  <div className="space-y-3">
-                    <div>
-                      <p className="text-sm text-gray-600 mb-2">Najbliższe odjazdy:</p>
-                      <div className="flex gap-2 flex-wrap">
-                        {currentGTFS.nextDepartures.map((time, index) => (
-                          <span
-                            key={index}
-                            className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-lg font-medium">
-                            {time}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                    <div>
-                      <p className="text-sm text-gray-600 mb-2">Główne przystanki:</p>
-                      <div className="text-xs text-gray-700 space-y-1">
-                        {currentGTFS.stops.map((stop, index) => (
-                          <div key={index} className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-blue-400 rounded-full"></div>
-                            {stop}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {relevantDisruptions.length > 0 && (
-                  <div className="bg-gradient-to-br from-amber-50 to-orange-50 rounded-xl p-4 border border-amber-100">
+                {selectedStop && (
+                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
                     <div className="flex items-center gap-2 mb-3">
-                      <AlertTriangle className="w-5 h-5 text-amber-600" />
-                      <span className="font-semibold text-amber-800">Utrudnienia</span>
+                      <Clock className="w-5 h-5 text-green-600" />
+                      <span className="font-semibold text-green-800">
+                        Odjazdy z {selectedStop.name}
+                      </span>
                     </div>
-                    <div className="space-y-3">
-                      {relevantDisruptions.map((disruption) => (
-                        <div key={disruption.id} className="border-l-4 border-amber-400 pl-3">
-                          <h4 className="font-medium text-gray-900 text-sm">{disruption.title}</h4>
-                          <p className="text-xs text-gray-600 mt-1">{disruption.description}</p>
-                          <div className="flex gap-1 mt-2">
-                            {disruption.affectedLines.map((line, index) => (
-                              <span
-                                key={index}
-                                className="px-2 py-1 bg-amber-100 text-amber-800 text-xs rounded">
-                                {line}
-                              </span>
-                            ))}
+                    <div className="space-y-2">
+                      {(selectedStop as any).realTimeDepartures?.slice(0, 5).map((departure: any, index: number) => (
+                        <div key={index} className="flex items-center justify-between p-2 bg-white rounded-lg border border-green-100">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 text-white rounded-full flex items-center justify-center text-sm font-bold ${
+                              departure.transportType === 'tram' ? 'bg-blue-600' : 'bg-green-600'
+                            }`}>
+                              {departure.lineId}
+                            </div>
+                            <div>
+                              <div className="font-medium text-gray-900">{departure.destination}</div>
+                              <div className="text-xs text-gray-500">{selectedStop.name}</div>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-semibold text-green-700">
+                              {departure.estimatedTime}
+                            </div>
+                            <div className={`text-xs ${departure.delay > 0 ? 'text-red-500' : 'text-gray-500'}`}>
+                              {departure.delay > 0 ? `+${departure.delay} min` : 'Na czas'}
+                            </div>
                           </div>
                         </div>
-                      ))}
+                      )) || (
+                        <div className="text-sm text-gray-500 text-center py-4">
+                          Brak dostępnych odjazdów
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
 
-                <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-4 border border-green-100">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Users className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold text-green-800">Opinie społeczności</span>
-                  </div>
-                  <div className="space-y-3">
-                    {mockCommunityData.slice(0, 2).map((item) => (
-                      <div key={item.id} className="border-l-4 border-green-400 pl-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="font-medium text-gray-900 text-sm">{item.user}</span>
-                          <div className="flex gap-1">
-                            {[...Array(5)].map((_, i) => (
-                              <Star
-                                key={i}
-                                className={`w-3 h-3 ${i < item.rating ? 'text-yellow-400 fill-current' : 'text-gray-300'}`}
-                              />
-                            ))}
-                          </div>
-                          <span className="text-xs text-gray-500">{item.time}</span>
-                        </div>
-                        <p className="text-xs text-gray-600">{item.comment}</p>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <LiveChat 
+                  routeId={currentRoute ? `${selectedTransport}-route` : 'no-route'}
+                  isActive={!!currentRoute}
+                />
               </div>
             )}
           </div>
@@ -729,26 +956,39 @@ export default function UrbanNavigator() {
       </div>
 
       <div className="flex-1 relative">
-        <MapContainer center={krakowCenter} zoom={13} className="w-full h-full" zoomControl={false}>
+        <MapContainer 
+          center={krakowCenter} 
+          zoom={13} 
+          className="w-full h-full" 
+          zoomControl={false}
+          whenReady={() => {
+            
+          }}
+        >
           <TileLayer
             url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
           />
+          <MapEventHandler onMoveEnd={setMapBounds} />
 
           <MapClickHandler onMapClick={handleMapClick} />
 
-          {/* Bus stop markers */}
-          {mockBusStops.map((stop) => (
-            <Marker key={stop.id} position={[stop.lat, stop.lng]} icon={createIcon('#10b981')}>
-              <Popup>
-                <div className="text-sm">
-                  <strong>{stop.name}</strong>
-                  <br />
-                  Linie: {stop.lines.join(', ')}
-                </div>
-              </Popup>
-            </Marker>
+          {showStops && filteredStops.map((stop) => (
+            <EnhancedStopMarker
+              key={stop.id}
+              stop={stop}
+              onClick={handleStopClick}
+              onPlanRoute={handlePlanRouteToStop}
+            />
           ))}
+
+          {showVehicles && (
+            <VehicleTracker
+              bounds={mapBounds}
+              lineFilter={transportFilter === 'all' ? undefined : [transportFilter]}
+              onVehicleClick={(vehicle) => console.log('Vehicle clicked:', vehicle)}
+            />
+          )}
 
           {startPoint && (
             <Marker position={[startPoint.lat, startPoint.lng]} icon={startIcon}>
@@ -774,12 +1014,13 @@ export default function UrbanNavigator() {
             </Marker>
           )}
 
-          <RouteLayer
-            start={startPoint}
-            end={endPoint}
-            transportMode={selectedTransport}
-            onRouteCalculated={setRouteInfo}
-          />
+          {currentRoute && (
+            <AnimatedRouteLayer
+              route={currentRoute}
+              animate={animateRoute}
+              onAnimationComplete={() => console.log('Animation completed')}
+            />
+          )}
         </MapContainer>
 
         {!startPoint && !endPoint && (
@@ -791,6 +1032,18 @@ export default function UrbanNavigator() {
               </p>
             </div>
           </div>
+        )}
+
+        {selectedStop && showStopDetails && (
+          <StopDetailsPanel
+            stop={selectedStop}
+            isOpen={showStopDetails}
+            onClose={() => {
+              setSelectedStop(null);
+              setShowStopDetails(false);
+            }}
+            onPlanRoute={handlePlanRouteToStop}
+          />
         )}
       </div>
     </div>

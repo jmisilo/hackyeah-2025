@@ -12,7 +12,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 
-// Custom type for PostGIS geography
+
 const geography = customType<{
   data: string;
   driverData: string;
@@ -29,7 +29,7 @@ const geography = customType<{
   },
 });
 
-// GTFS Routes table
+
 export const gtfsRoutes = pgTable('gtfs_routes', {
   routeId: text('route_id').primaryKey(),
   routeShortName: text('route_short_name'),
@@ -40,7 +40,7 @@ export const gtfsRoutes = pgTable('gtfs_routes', {
   mode: text('mode'),
 });
 
-// GTFS Stops table
+
 export const gtfsStops = pgTable(
   'gtfs_stops',
   {
@@ -55,7 +55,7 @@ export const gtfsStops = pgTable(
   }),
 );
 
-// GTFS Trips table
+
 export const gtfsTrips = pgTable(
   'gtfs_trips',
   {
@@ -72,7 +72,7 @@ export const gtfsTrips = pgTable(
   }),
 );
 
-// GTFS Stop Times table
+
 export const gtfsStopTimes = pgTable(
   'gtfs_stop_times',
   {
@@ -88,7 +88,7 @@ export const gtfsStopTimes = pgTable(
   }),
 );
 
-// GTFS Shapes table
+
 export const gtfsShapes = pgTable(
   'gtfs_shapes',
   {
@@ -102,7 +102,7 @@ export const gtfsShapes = pgTable(
   }),
 );
 
-// GTFS Shapes Lines view
+
 export const gtfsShapesLines = pgView('gtfs_shapes_lines', {
   routeId: text('route_id'),
   mode: text('mode'),
@@ -110,7 +110,7 @@ export const gtfsShapesLines = pgView('gtfs_shapes_lines', {
   geojson: text('geojson'),
 });
 
-// Community Alerts table
+
 export const communityAlerts = pgTable(
   'community_alerts',
   {
