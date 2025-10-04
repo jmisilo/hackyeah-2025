@@ -1,0 +1,3 @@
+pnpm test
+pnpm tsc --noEmit
+npx branch-name-lint .branch-name-lintrc
