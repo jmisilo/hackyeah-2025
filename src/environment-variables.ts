@@ -9,12 +9,14 @@ export const envVariables = createEnv({
   },
   client: {
     NEXT_PUBLIC_VERCEL_ENV: z.enum(['production', 'preview', 'development']).optional(),
+    NEXT_PUBLIC_OTP_BASE_URL: z.string().url(),
   },
   shared: {},
   runtimeEnv: {
     DATABASE_URL: process.env.DATABASE_URL,
 
     NEXT_PUBLIC_VERCEL_ENV: process.env.NEXT_PUBLIC_VERCEL_ENV,
+    NEXT_PUBLIC_OTP_BASE_URL: process.env.NEXT_PUBLIC_OTP_BASE_URL,
   },
   extends: [vercel()],
 });

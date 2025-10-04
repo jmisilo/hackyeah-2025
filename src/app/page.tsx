@@ -1,5 +1,19 @@
-const Page = () => {
-  return <></>;
-};
+'use client';
 
-export default Page;
+import dynamic from 'next/dynamic';
+
+const UrbanNavigator = dynamic(() => import('@/components/map/UrbanNavigator'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-screen flex items-center justify-center bg-gray-100">
+      <div className="text-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+        <p className="text-gray-600">Ładowanie Navigator...</p>
+      </div>
+    </div>
+  ),
+});
+
+export default function Page() {
+  return <UrbanNavigator />;
+}
