@@ -108,19 +108,13 @@ export const Sidebar: FC<SidebarProps> = ({
           </div>
         </div>
       </div>
-      <p className="text-base">Sugerowane trasy</p>
+      {!!searchStart && !!searchEnd && <p className="text-base">Sugerowane trasy</p>}
 
-      <div className="flex-1 overflow-y-auto -mt-2">
-        <div className="flex flex-col gap-y-6">
-          <div className="flex flex-col gap-y-4">
-            <ul className="flex flex-col gap-y-3">
-              {PROPOSED_ROUTES.map((route, index) => (
-                <SidebarRouteListItem key={index} {...route} />
-              ))}
-            </ul>
-          </div>
-        </div>
-      </div>
+      <ul className="flex-1 overflow-y-auto -mt-2 scrollbar-thin scrollbar-track-transparent scrollbar-thumb-black/30 scrollbar-track-rounded-full flex flex-col gap-y-3">
+        {!!searchStart &&
+          !!searchEnd &&
+          PROPOSED_ROUTES.map((route, index) => <SidebarRouteListItem key={index} {...route} />)}
+      </ul>
 
       <div className="rounded-lg p-3 border border-black/12 bg-[#FFF6EB] flex flex-col gap-y-4">
         <div className="flex items-center gap-x-3">
