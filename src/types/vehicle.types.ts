@@ -26,7 +26,7 @@ export interface VehicleSubscription {
     east: number;
     west: number;
   };
-  routeTypes?: ('bus' | 'tram')[];
+  routeTypes?: ('bus' | 'tram' | 'train')[];
 }
 
 export interface VehicleTrackingConfig {

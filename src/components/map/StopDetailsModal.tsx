@@ -78,18 +78,7 @@ export function StopDetailsModal({ stop, isVisible, onClose, onPlanRoute }: Stop
              
 
               <div className="space-y-2">
-                <p className="text-sm font-medium text-gray-700">Linie obsługujące przystanek</p>
-                <div className="flex flex-wrap gap-2">
-                  {stop.lines.map((line) => (
-                    <div
-                      key={line}
-                      className={`flex items-center space-x-1 px-2 py-1 rounded-full text-xs font-medium ${getLineColor(stop.type)}`}
-                    >
-                      {getLineIcon(stop.type)}
-                      <span>{line}</span>
-                    </div>
-                  ))}
-                </div>
+               
               </div>
 
               <div className="space-y-3">

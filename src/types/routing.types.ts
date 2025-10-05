@@ -6,7 +6,7 @@ export type { RouteSegment, MultiModalRoute, EnhancedGTFSStop } from './enhanced
 export interface RoutingRequest {
   start: LatLng;
   end: LatLng;
-  transportModes: ('walking' | 'bus' | 'tram')[];
+  transportModes: ('walking' | 'bus' | 'tram' | 'train')[];
   maxWalkingDistance?: number; 
   maxWalkingTime?: number; 
   departureTime?: Date;
@@ -55,7 +55,7 @@ export interface WalkingSegment extends RouteSegment {
 }
 
 export interface TransitSegment extends RouteSegment {
-  type: 'bus' | 'tram';
+  type: 'bus' | 'tram' | 'train';
   lineNumber: string;
   direction: string;
   headsign: string;
@@ -84,6 +84,7 @@ export interface RoutingState {
   alternatives: MultiModalRoute[];
   isLoading: boolean;
   error: string | null;
+  warnings: RoutingWarning[];
   lastRequest: RoutingRequest | null;
 }
 
@@ -111,7 +112,9 @@ export interface RoutingHookReturn {
   alternatives: MultiModalRoute[];
   isLoading: boolean;
   error: string | null;
+  warnings: RoutingWarning[];
   planRoute: (request: RoutingRequest) => Promise<void>;
   clearRoute: () => void;
   retryLastRequest: () => Promise<void>;
+  selectRoute: (route: MultiModalRoute) => void;
 }

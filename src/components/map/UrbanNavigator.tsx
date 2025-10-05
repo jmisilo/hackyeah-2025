@@ -2,28 +2,33 @@
 
 import {
   Bus,
-  CircleQuestionMark,
-  Clock,
-  Hourglass,
-  MoveRight,
-  Pin,
   Plus,
   Train,
+  AlertTriangle,
+  Settings,
 } from 'lucide-react';
-import { useCallback, useEffect, useState } from 'react';
+import { IncidentReportForm } from '@/components/forms/IncidentReportForm';
+import { useCallback, useEffect, useState, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
 import { MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from 'react-leaflet';
 
 import { Icon, LatLng as LeafletLatLng } from 'leaflet';
 import { toast } from 'sonner';
 
 import { useMultiModalRouting } from '@/hooks/useMultiModalRouting';
-import { type GTFSStop, krakowStops } from '@/infrastructure/gtfs/gtfs-data';
+import { type GTFSStop, krakowStops, trainDisruptions, getActiveDisruptionsForStop } from '@/infrastructure/gtfs/gtfs-data';
 import { type LatLng, osrmClient } from '@/infrastructure/routing/osrm-client';
+import { type RoutingRequest } from '@/types/routing.types';
+import { incidentService } from '@/services/incidentService';
+import { Incident } from '@/types/dispatcher.types';
 import { Button } from '@/ui/button';
 import { Modal, useModal } from '@/ui/modal';
 
 import { AnimatedRouteLayer } from './AnimatedRouteLayer';
+import { DisruptionMarker } from './DisruptionMarker';
 import { EnhancedStopMarker } from './EnhancedStopMarker';
+import { IncidentMarker } from './IncidentMarker';
+import { IncidentPanel, findIncidentsNearRoute } from './IncidentPanel';
 import { RouteSearchLoader } from './RouteSearchLoader';
 import { StopDetailsModal } from './StopDetailsModal';
 import { VehicleDetailsModal } from './VehicleDetailsModal';
@@ -49,7 +54,7 @@ const endIcon = createIcon('#ef4444');
 interface RouteLayerProps {
   start: LatLng | null;
   end: LatLng | null;
-  transportMode: 'bus' | 'tram';
+  transportMode: 'bus' | 'train' | 'bike';
   onRouteCalculated?: (route: any) => void;
 }
 
@@ -57,8 +62,17 @@ function RouteLayer({ start, end, transportMode, onRouteCalculated }: RouteLayer
   const map = useMap();
   const [routeSegments, setRouteSegments] = useState<any[]>([]);
 
-  const getRouteColor = (mode: 'bus' | 'tram') => {
-    return mode === 'bus' ? '#f97316' : '#22c55e';
+  const getRouteColor = (mode: 'bus' | 'train' | 'bike') => {
+    switch (mode) {
+      case 'bus':
+        return '#f97316'; 
+      case 'train':
+        return '#2B87E4'; 
+      case 'bike':
+        return '#408333'; 
+      default:
+        return '#f97316';
+    }
   };
 
   useEffect(() => {
@@ -95,7 +109,13 @@ function RouteLayer({ start, end, transportMode, onRouteCalculated }: RouteLayer
 
           const transportRouteMeta = {
             type: 'transport',
-            description: `${transportMode === 'bus' ? 'Autobusem' : 'Tramwajem'} ${startStop.name} → ${endStop.name}`,
+            description: `${
+              transportMode === 'bus' 
+                ? 'Autobusem' 
+                : transportMode === 'train' 
+                ? 'Pociągiem' 
+                : 'Rowerem'
+            } ${startStop.name} → ${endStop.name}`,
           };
           segments.push(transportRoute);
 
@@ -338,7 +358,9 @@ const createTransportRoute = async (startStop: any, endStop: any): Promise<any> 
 };
 
 export default function UrbanNavigator() {
-  const [disabled, setDisabled] = useState(false);
+  console.log('🚀 UrbanNavigator component started rendering');
+  
+  const router = useRouter();
   const [startPoint, setStartPoint] = useState<LatLng | null>(null);
   const [endPoint, setEndPoint] = useState<LatLng | null>(null);
   const [startName, setStartName] = useState('');
@@ -346,27 +368,45 @@ export default function UrbanNavigator() {
   const [searchStart, setSearchStart] = useState('');
   const [searchEnd, setSearchEnd] = useState('');
   const [clickMode, setClickMode] = useState<'start' | 'end' | null>(null);
-  const [selectedTransport, setSelectedTransport] = useState<'bus' | 'tram'>('bus');
+  const [selectedTransport, setSelectedTransport] = useState<'bus' | 'train' | 'bike'>('bus');
 
   const [selectedStop, setSelectedStop] = useState<GTFSStop | null>(null);
   const [showStopDetails, setShowStopDetails] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState<any>(null);
   const [showVehicleDetails, setShowVehicleDetails] = useState(false);
-  const [transportFilter, setTransportFilter] = useState<'all' | 'bus' | 'tram' | 'both'>('all');
+
   const [showVehicles, setShowVehicles] = useState(true);
   const [showStops, setShowStops] = useState(true);
+  const [showDisruptions, setShowDisruptions] = useState(true);
   const [animateRoute, setAnimateRoute] = useState(true);
   const [mapBounds, setMapBounds] = useState<any>(null);
+
+  
+  const [showIncidentPanel, setShowIncidentPanel] = useState(false);
+  const [incidentPanelClosedByUser, setIncidentPanelClosedByUser] = useState(false);
+  const [selectedIncident, setSelectedIncident] = useState<Incident | null>(null);
+  const [allIncidents, setAllIncidents] = useState<Incident[]>([]);
+  const [hasIncidentsNearRoute, setHasIncidentsNearRoute] = useState(false);
 
   const { openModal, closeModal } = useModal();
 
   const {
     planRoute,
     currentRoute,
+    alternatives,
     isLoading: routeLoading,
     error: routeError,
+    warnings: routeWarnings,
     clearRoute: clearCurrentRoute,
+    selectRoute,
   } = useMultiModalRouting();
+
+  console.log('UrbanNavigator render - states:', {
+    hasIncidentsNearRoute,
+    showIncidentPanel,
+    allIncidentsCount: allIncidents.length,
+    currentRoute: !!currentRoute
+  });
 
   const krakowCenter: [number, number] = [50.0647, 19.945];
 
@@ -403,8 +443,6 @@ export default function UrbanNavigator() {
       setEndPoint({ lat: stop.lat, lng: stop.lng });
       setEndName(stop.name);
       setSearchEnd(stop.name);
-
-      handlePlanRoute();
     } else {
       setStartPoint({ lat: stop.lat, lng: stop.lng });
       setStartName(stop.name);
@@ -413,63 +451,153 @@ export default function UrbanNavigator() {
     setShowStopDetails(false);
   };
 
-  const handlePlanRoute = useCallback(async () => {
-    if (!startPoint || !endPoint) return;
 
-    try {
-      await planRoute({
+
+  useEffect(() => {
+    if (startPoint && endPoint && selectedTransport) {
+      
+      const transportModeMapping: Record<'bus' | 'train' | 'bike', ('walking' | 'bus' | 'tram' | 'train')> = {
+        'bus': 'bus',
+        'train': 'train',
+        'bike': 'tram' 
+      };
+      
+      const request: RoutingRequest = {
         start: startPoint,
         end: endPoint,
-        transportModes:
-          selectedTransport === 'bus'
-            ? ['bus']
-            : selectedTransport === 'tram'
-              ? ['tram']
-              : ['bus', 'tram'],
-        maxWalkingDistance: 800,
+        transportModes: [transportModeMapping[selectedTransport]],
         preferences: {
           minimizeWalking: false,
           minimizeTransfers: true,
-          minimizeTime: false,
+          minimizeTime: true,
           avoidStairs: false,
-          preferExpress: false,
-        },
-      });
-    } catch (error) {
-      console.error('Błąd podczas planowania trasy:', error);
+          preferExpress: false
+        }
+      };
+      
+      planRoute(request);
     }
   }, [startPoint, endPoint, selectedTransport, planRoute]);
 
+  
   useEffect(() => {
-    if (startPoint && endPoint) {
-      handlePlanRoute();
+    if (currentRoute) {
+      
+      console.log('Route found, checking incidents...');
+    } else {
+      setShowIncidentPanel(false);
+      setHasIncidentsNearRoute(false);
+      console.log('No route, hiding incident panel and clearing incidents flag');
     }
-  }, [startPoint, handlePlanRoute, endPoint, selectedTransport]);
+  }, [currentRoute]);
 
-  const filteredStops = krakowStops.filter((stop) => {
-    if (transportFilter === 'all') return true;
-    return stop.type === transportFilter;
-  });
+  
+  useEffect(() => {
+    if (currentRoute && allIncidents.length > 0) {
+      console.log('Checking incidents near route:', {
+        routeExists: !!currentRoute,
+        incidentsCount: allIncidents.length,
+        routeSegments: currentRoute.segments?.length || 0
+      });
+      
+      const nearbyIncidents = findIncidentsNearRoute(allIncidents, currentRoute, 10);
+      const hasIncidents = nearbyIncidents.length > 0;
+      setHasIncidentsNearRoute(hasIncidents);
+      
+      console.log('Incidents check result:', {
+        hasIncidents,
+        nearbyIncidentsCount: nearbyIncidents.length,
+        incidents: nearbyIncidents.map(inc => ({ id: inc.id, type: inc.type, distance: inc.distanceFromRoute }))
+      });
+    } else {
+      setHasIncidentsNearRoute(false);
+      console.log('No incidents check - route or incidents missing:', {
+        hasRoute: !!currentRoute,
+        incidentsCount: allIncidents.length
+      });
+    }
+  }, [currentRoute, allIncidents]);
+
+  
+  useEffect(() => {
+    if (hasIncidentsNearRoute && currentRoute) {
+      setShowIncidentPanel(true);
+      console.log('Auto-showing incident panel for new route with incidents');
+    }
+  }, [hasIncidentsNearRoute, currentRoute]);
+
+  
+  useEffect(() => {
+    const loadIncidents = async () => {
+      try {
+        const incidents = await incidentService.getAllIncidents();
+        console.log('Loaded incidents:', incidents);
+        setAllIncidents(incidents);
+      } catch (error) {
+        console.error('Błąd podczas pobierania incydentów:', error);
+      }
+    };
+
+    loadIncidents();
+  }, []);
+
+  const filteredStops = useMemo(() => {
+    if (selectedTransport === 'train') {
+      return krakowStops.filter(stop => stop.type === 'train');
+    } else if (selectedTransport === 'bus') {
+      
+      return krakowStops.filter(stop => stop.type === 'bus' || stop.type === 'tram');
+    } else if (selectedTransport === 'bike') {
+      
+      return [];
+    }
+    return krakowStops;
+  }, [selectedTransport]);
 
   const handleStartLocationSelect = (location: LatLng, name: string) => {
+    console.log('🎯 handleStartLocationSelect wywołane:', { location, name });
     try {
       setStartPoint(location);
       setStartName(name);
       setSearchStart(name.split(',')[0] || name);
+      console.log('✅ Punkt startowy ustawiony:', location);
     } catch (error) {
-      console.error('Błąd podczas ustawiania punktu startowego:', error);
+      console.error('❌ Błąd podczas ustawiania punktu startowego:', error);
     }
   };
 
   const handleEndLocationSelect = (location: LatLng, name: string) => {
+    console.log('🎯 handleEndLocationSelect wywołane:', { location, name });
     try {
       setEndPoint(location);
       setEndName(name);
       setSearchEnd(name.split(',')[0] || name);
+      console.log('✅ Punkt końcowy ustawiony:', location);
     } catch (error) {
-      console.error('Błąd podczas ustawiania punktu docelowego:', error);
+      console.error('❌ Błąd podczas ustawiania punktu docelowego:', error);
     }
   };
+
+  const handleIncidentClick = (incident: Incident) => {
+    console.log('🚨 Kliknięto incydent:', incident);
+    setSelectedIncident(incident);
+  };
+
+  const handleResetRoute = () => {
+    console.log('🔄 Resetowanie trasy');
+    clearCurrentRoute();
+    setStartPoint(null);
+    setEndPoint(null);
+    setSearchStart('');
+    setSearchEnd('');
+    setStartName('');
+    setEndName('');
+    setShowIncidentPanel(false);
+    setHasIncidentsNearRoute(false);
+    setSelectedIncident(null);
+  };
+
+
 
   return (
     <div className="flex h-screen bg-gray-50 relative">
@@ -484,79 +612,36 @@ export default function UrbanNavigator() {
         setSearchEnd={setSearchEnd}
         startPoint={startPoint}
         endPoint={endPoint}
+        currentRoute={currentRoute}
+        alternatives={alternatives}
+        isLoading={routeLoading}
+        error={routeError}
+        warnings={routeWarnings}
+        onRouteSelect={selectRoute}
+        selectedTransport={selectedTransport}
+        onTransportSelect={setSelectedTransport}
+        onResetRoute={handleResetRoute}
       />
 
       <Button
         className="flex gap-x-2 items-center fixed top-4 right-4 z-1000 rounded-lg cursor-pointer"
+        onClick={() => router.push('/dispatcher')}
+      >
+        Panel dystrybutora <Settings className="size-4.5" />
+      </Button>
+
+      <Button
+        className="flex gap-x-2 items-center fixed top-16 right-4 z-1000 rounded-lg cursor-pointer"
         onClick={() =>
           openModal(
             <>
-              <Modal.Header title="Zgłoś opóźnienie"></Modal.Header>
-
+              <Modal.Header title="Zgłoś utrudnienie"></Modal.Header>
               <Modal.Content>
-                <div className="flex flex-col gap-y-4">
-                  <label className="py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg">
-                    <CircleQuestionMark className="text-black/50" />
-
-                    <input
-                      className="text-black/50 placeholder:text-black/70 focus:outline-none w-full "
-                      placeholder="Wybierz rodzaj uniedogodnienia"
-                    />
-                  </label>
-
-                  <label className="py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg">
-                    <Hourglass className="text-black/50" />
-
-                    <input
-                      className="text-black/50 placeholder:text-black/70 focus:outline-none w-full "
-                      placeholder="Jaki jest czas opóźnienia?"
-                    />
-                  </label>
-
-                  <label className="py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg">
-                    <Pin className="text-black/50" />
-
-                    <input
-                      className="text-black/50 placeholder:text-black/70 focus:outline-none w-full "
-                      placeholder="Gdzie?"
-                    />
-                  </label>
-
-                  <label className="py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg">
-                    <Clock className="text-black/50" />
-
-                    <input
-                      className="text-black/50 placeholder:text-black/70 focus:outline-none w-full "
-                      placeholder="Kiedy nastąpiło wydarzenie?"
-                    />
-                  </label>
-
-                  <textarea
-                    placeholder="Dodatkowe informacje..."
-                    className="resize-none py-2 px-3 flex items-center gap-x-2 bg-[#F5F5F5] rounded-lg"
-                    rows={3}
-                  />
-
-                  <Button
-                    disabled={disabled}
-                    className="bg-[#FFA633] disabled:opacity-5 flex items-center justify-center gap-x-2"
-                    onClick={async (e) => {
-                      e.preventDefault();
-                      setDisabled(true);
-
-                      await new Promise((resolve) => setTimeout(resolve, 500));
-
-                      toast.success('Dziękujemy za zgłoszenie!');
-
-                      await new Promise((resolve) => setTimeout(resolve, 100));
-
-                      closeModal();
-
-                      setDisabled(false);
-                    }}>
-                    Wyślij zgłoszenie <MoveRight className="size-6" />
-                  </Button>
-                </div>
+                <IncidentReportForm 
+                  onClose={closeModal}
+                  initialLocation={startPoint || endPoint || undefined}
+                  initialLocationName={startName || endName || ''}
+                />
               </Modal.Content>
             </>,
           )
@@ -589,10 +674,32 @@ export default function UrbanNavigator() {
               />
             ))}
 
+          {showDisruptions &&
+            filteredStops.map((stop) => {
+              const disruptions = getActiveDisruptionsForStop(stop.id);
+              return disruptions.map((disruption) => (
+                <DisruptionMarker
+                  key={`${stop.id}-${disruption.id}`}
+                  disruption={disruption}
+                  stop={stop}
+                />
+              ));
+            }).flat()}
+
+          
+          {allIncidents.map((incident) => (
+            <IncidentMarker
+              key={incident.id}
+              incident={incident}
+              isHighlighted={selectedIncident?.id === incident.id}
+              onClick={handleIncidentClick}
+            />
+          ))}
+
           {showVehicles && (
             <VehicleTracker
               bounds={mapBounds}
-              lineFilter={transportFilter === 'all' ? undefined : [transportFilter]}
+              lineFilter={selectedTransport ? [selectedTransport] : undefined}
               onVehicleClick={handleVehicleClick}
               showStops={showStops}
               onToggleStops={() => setShowStops(!showStops)}
@@ -647,6 +754,44 @@ export default function UrbanNavigator() {
           onPlanRoute={handlePlanRouteToStop}
         />
       </div>
+
+      
+      {hasIncidentsNearRoute && !showIncidentPanel && (
+        <button
+          onClick={() => {
+            console.log('Toggle button clicked, opening incident panel');
+            setShowIncidentPanel(true);
+          }}
+          className="
+            fixed left-[336px] top-4 w-12 h-12 
+            bg-[#FFA633] hover:bg-[#FF9500] 
+            rounded-full shadow-lg z-[1001] 
+            flex items-center justify-center
+            transition-all duration-200 ease-in-out
+            hover:scale-110 hover:shadow-xl
+            border-2 border-white
+            
+            lg:left-[336px] lg:top-4 lg:w-12 lg:h-12
+            md:left-[320px] md:top-2 md:w-10 md:h-10
+            sm:fixed sm:bottom-4 sm:right-4 sm:left-auto sm:top-auto 
+            sm:w-14 sm:h-14
+          "
+          title="Pokaż incydenty na trasie"
+        >
+          <AlertTriangle className="w-6 h-6 text-white lg:w-6 lg:h-6 md:w-5 md:h-5 sm:w-7 sm:h-7" />
+        </button>
+      )}
+
+      
+      <IncidentPanel
+        route={currentRoute}
+        isVisible={showIncidentPanel}
+        onClose={() => {
+          console.log('Incident panel closed by user');
+          setShowIncidentPanel(false);
+        }}
+        onIncidentClick={handleIncidentClick}
+      />
     </div>
   );
 }
