@@ -140,6 +140,8 @@ export const EnhancedStopMarker: React.FC<EnhancedStopMarkerProps> = ({
         return '#3B82F6';
       case 'bus':
         return '#FF9000'; 
+      case 'train':
+        return '#2B87E4';
       case 'both':
         return 'linear-gradient(90deg, #3B82F6 50%, #FF9000 50%)'; 
       default:
@@ -157,6 +159,10 @@ export const EnhancedStopMarker: React.FC<EnhancedStopMarkerProps> = ({
       case 'bus':
         return `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 576 512" fill="white">
           <path d="M288 0C422.4 0 512 35.2 512 80v16V384c0 35.3-28.7 64-64 64V488c0 13.3-10.7 24-24 24H392c-13.3 0-24-10.7-24-24V448H208v40c0 13.3-10.7 24-24 24H136c-13.3 0-24-10.7-24-24V448c-35.3 0-64-28.7-64-64V96 80C48 35.2 137.6 0 288 0zM128 160v96c0 17.7 14.3 32 32 32H416c17.7 0 32-14.3 32-32V160c0-17.7-14.3-32-32-32H160c-17.7 0-32 14.3-32 32z"/>
+        </svg>`;
+      case 'train':
+        return `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 448 512" fill="white">
+          <path d="M96 0C43 0 0 43 0 96v256c0 48 35.2 87.7 81.1 94.9l-46 46C28.1 499.9 33.1 512 43 512h39.7c8.5 0 16.6-3.4 22.6-9.4L160 448h128l54.6 54.6c6 6 14.1 9.4 22.6 9.4H405c10 0 15-12.1 7.9-19.1l-46-46c46-7.1 81.1-46.9 81.1-94.9V96c0-53-43-96-96-96H96zM64 128c0-17.7 14.3-32 32-32h256c17.7 0 32-14.3 32-32s-14.3-32-32-32H96c-17.7 0-32 14.3-32 32v32zM64 192v128c0 17.7 14.3 32 32 32h256c17.7 0 32-14.3 32-32V192c0-17.7-14.3-32-32-32H96c-17.7 0-32 14.3-32 32z"/>
         </svg>`;
       case 'both':
         return `<svg width="${iconSize}" height="${iconSize}" viewBox="0 0 32 16" fill="white">
@@ -227,6 +233,7 @@ export const EnhancedStopMarker: React.FC<EnhancedStopMarkerProps> = ({
     <Marker
       position={[stop.lat, stop.lng]}
       icon={createStopIcon()}
+      zIndexOffset={200}
       eventHandlers={{
         click: () => {
           loadEnhancedData();

@@ -13,6 +13,7 @@ export function useMultiModalRouting(): RoutingHookReturn {
     currentRoute: null,
     alternatives: [],
     error: null,
+    warnings: [],
     lastRequest: null
   });
 
@@ -27,11 +28,21 @@ export function useMultiModalRouting(): RoutingHookReturn {
     try {
       const response = await multiModalRoutingService.planRoute(request);
       
+      console.log('🔧 useMultiModalRouting - response:', {
+        routes: response.routes,
+        routesLength: response.routes?.length || 0,
+        alternatives: response.alternatives,
+        alternativesLength: response.alternatives?.length || 0,
+        warnings: response.warnings,
+        firstRoute: response.routes?.[0] || null
+      });
+      
       setState(prev => ({
         ...prev,
         isLoading: false,
         currentRoute: response.routes.length > 0 ? response.routes[0] : null,
         alternatives: response.alternatives || [],
+        warnings: response.warnings || [],
         error: response.warnings.some(w => w.severity === 'error') 
           ? response.warnings.find(w => w.severity === 'error')?.message || 'Nieznany błąd'
           : null
@@ -43,6 +54,7 @@ export function useMultiModalRouting(): RoutingHookReturn {
         ...prev,
         isLoading: false,
         error: errorMessage,
+        warnings: [],
         currentRoute: null,
         alternatives: []
       }));
@@ -56,6 +68,7 @@ export function useMultiModalRouting(): RoutingHookReturn {
       currentRoute: null,
       alternatives: [],
       error: null,
+      warnings: [],
       lastRequest: null
     }));
   }, []);
@@ -67,11 +80,28 @@ export function useMultiModalRouting(): RoutingHookReturn {
     await planRoute(state.lastRequest);
   }, [state.lastRequest, planRoute]);
 
+  const selectRoute = useCallback((route: any) => {
+    setState(prev => {
+      
+      const allRoutes = prev.currentRoute ? [prev.currentRoute, ...prev.alternatives] : prev.alternatives;
+      
+      
+      const remainingRoutes = allRoutes.filter(r => r.id !== route.id);
+      
+      return {
+        ...prev,
+        currentRoute: route,
+        alternatives: remainingRoutes
+      };
+    });
+  }, []);
+
   return {
     ...state,
     planRoute,
     clearRoute,
-    retryLastRequest
+    retryLastRequest,
+    selectRoute
   };
 }
 

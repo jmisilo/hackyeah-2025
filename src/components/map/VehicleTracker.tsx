@@ -14,7 +14,7 @@ interface VehicleTrackerProps {
     west: number;
   };
   lineFilter?: string[];
-  typeFilter?: ('bus' | 'tram')[];
+  typeFilter?: ('bus' | 'tram' | 'train')[];
   showClustering?: boolean;
   clusterDistance?: number;
   onVehicleClick?: (vehicle: VehiclePosition) => void;
@@ -37,7 +37,7 @@ export const VehicleTracker: React.FC<VehicleTrackerProps> = ({
   const map = useMap();
   const [isVisible, setIsVisible] = useState(true);
   const [showControls, setShowControls] = useState(false);
-  const [localTypeFilter, setLocalTypeFilter] = useState<('bus' | 'tram')[]>(typeFilter || ['bus', 'tram']);
+  const [localTypeFilter, setLocalTypeFilter] = useState<('bus' | 'tram' | 'train')[]>(typeFilter || ['bus', 'tram']);
   const [localLineFilter, setLocalLineFilter] = useState<string[]>(lineFilter || []);
 
   
@@ -246,7 +246,7 @@ export const VehicleTracker: React.FC<VehicleTrackerProps> = ({
                   <label className="block text-xs font-medium text-gray-700 mb-1">
                     Typ transportu
                   </label>
-                  <div className="flex space-x-2">
+                  <div className="flex space-x-2 flex-wrap">
                     <button
                       onClick={() => setLocalTypeFilter(prev => 
                         prev.includes('tram') 
@@ -274,6 +274,20 @@ export const VehicleTracker: React.FC<VehicleTrackerProps> = ({
                       }`}
                     >
                       🚌 Autobusy
+                    </button>
+                    <button
+                      onClick={() => setLocalTypeFilter(prev => 
+                        prev.includes('train') 
+                          ? prev.filter(t => t !== 'train')
+                          : [...prev, 'train']
+                      )}
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                        localTypeFilter.includes('train')
+                          ? 'bg-purple-100 text-purple-700'
+                          : 'bg-gray-100 text-gray-600'
+                      }`}
+                    >
+                      🚆 Pociągi
                     </button>
                   </div>
                 </div>

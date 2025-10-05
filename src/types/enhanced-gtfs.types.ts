@@ -5,7 +5,7 @@ export interface GTFSStop {
   name: string;
   lat: number;
   lng: number;
-  type: 'bus' | 'tram' | 'both';
+  type: 'bus' | 'tram' | 'train' | 'both';
   lines: string[];
 }
 
@@ -13,7 +13,7 @@ export interface EnhancedGTFSStop extends GTFSStop {
   walkingTime?: number; 
   walkingDistance?: number; 
   realTimeDepartures?: RealTimeDeparture[];
-  stopIcon: 'bus' | 'tram' | 'both';
+  stopIcon: 'bus' | 'tram' | 'train' | 'both';
   accessibility?: boolean;
   zone?: string;
   platform?: string;
@@ -26,7 +26,7 @@ export interface RealTimeDeparture {
   delay: number; 
   vehicleId?: string;
   routeColor: string;
-  routeType: 'bus' | 'tram';
+  routeType: 'bus' | 'tram' | 'train';
   headsign?: string;
   realTime: string; 
   estimatedTime?: string; 
@@ -40,7 +40,7 @@ export interface VehiclePosition {
   bearing: number;
   speed: number; 
   timestamp: Date;
-  routeType: 'bus' | 'tram';
+  routeType: 'bus' | 'tram' | 'train';
   routeColor: string;
   destination?: string;
   occupancy?: 'empty' | 'few_seats' | 'standing_room' | 'crushed_standing' | 'full' | 'not_accepting_passengers';
@@ -48,7 +48,7 @@ export interface VehiclePosition {
 
 export interface RouteSegment {
   id: string;
-  type: 'walking' | 'bus' | 'tram';
+  type: 'walking' | 'bus' | 'tram' | 'train';
   startPoint: LatLng;
   endPoint: LatLng;
   duration: number; 
@@ -77,7 +77,7 @@ export interface MultiModalRoute {
     total: number;
     currency: string;
     breakdown: Array<{
-      type: 'bus' | 'tram' | 'transfer';
+      type: 'bus' | 'tram' | 'train' | 'transfer';
       amount: number;
     }>;
   };
@@ -85,14 +85,16 @@ export interface MultiModalRoute {
 
 export interface TransportDisruption {
   id: string;
-  type: 'construction' | 'delay' | 'cancellation' | 'detour';
+  type: 'delay' | 'cancellation' | 'route_change' | 'service_alert' | 'maintenance' | 'breakdown';
+  severity: 'low' | 'medium' | 'high' | 'critical';
   title: string;
   description: string;
-  severity: 'low' | 'medium' | 'high';
-  affectedLines: string[];
-  affectedStops?: string[];
+  affectedRoutes: string[];
+  affectedStops: string[];
   startTime: Date;
   endTime?: Date;
+  isActive: boolean;
+  estimatedDelay?: number; 
   alternativeRoutes?: string[];
 }
 
@@ -116,5 +118,5 @@ export interface RoutePattern {
   stops: EnhancedGTFSStop[];
   geometry: GeoJSON.LineString;
   color: string;
-  routeType: 'bus' | 'tram';
+  routeType: 'bus' | 'tram' | 'train';
 }
