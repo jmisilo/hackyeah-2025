@@ -1,6 +1,6 @@
 'use client';
 
-import { Route, Train, Bus } from 'lucide-react';
+import { Bus, Route, Train } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 interface RouteSearchLoaderProps {
@@ -14,7 +14,7 @@ export function RouteSearchLoader({ isVisible }: RouteSearchLoaderProps) {
     if (!isVisible) return;
 
     const vehicleInterval = setInterval(() => {
-      setVehicleType(prev => prev === 'tram' ? 'bus' : 'tram');
+      setVehicleType((prev) => (prev === 'tram' ? 'bus' : 'tram'));
     }, 3000);
 
     return () => clearInterval(vehicleInterval);
@@ -25,7 +25,7 @@ export function RouteSearchLoader({ isVisible }: RouteSearchLoaderProps) {
   return (
     <div className="absolute inset-0 z-[1000] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" />
-      
+
       <div className="relative bg-white/95 backdrop-blur-md rounded-2xl p-8 shadow-2xl border border-white/20 max-w-sm mx-4 transform transition-all duration-300 ease-out">
         <div className="flex flex-col items-center space-y-6">
           <div className="relative">
@@ -36,29 +36,27 @@ export function RouteSearchLoader({ isVisible }: RouteSearchLoaderProps) {
           </div>
 
           <div className="text-center">
-            <h3 className="text-lg font-semibold text-gray-800 mb-2">
-              Wyszukuję trasę
-            </h3>
-            
+            <h3 className="text-lg font-semibold text-gray-800 mb-2">Wyszukuję trasę</h3>
+
             <div className="relative w-48 h-12 mx-auto overflow-hidden">
               <div className="absolute bottom-2 left-0 right-0 h-1 bg-gray-300 rounded-full">
                 <div className="h-full bg-gradient-to-r from-gray-400 to-gray-300 rounded-full" />
               </div>
-              
+
               {vehicleType === 'tram' && (
                 <>
                   <div className="absolute bottom-3 left-0 right-0 h-0.5 bg-gray-400 rounded-full" />
                   <div className="absolute bottom-1 left-0 right-0 h-0.5 bg-gray-400 rounded-full" />
                 </>
               )}
-              
-              <div 
+
+              <div
                 className="absolute bottom-0 transition-colors duration-500"
                 style={{
-                  animation: 'vehicle-move 3s linear infinite'
-                }}
-              >
-                <div className={`p-2 rounded-lg ${vehicleType === 'tram' ? 'bg-orange-500' : 'bg-orange-500'} text-white shadow-lg`}>
+                  animation: 'vehicle-move 3s linear infinite',
+                }}>
+                <div
+                  className={`p-2 rounded-lg ${vehicleType === 'tram' ? 'bg-orange-500' : 'bg-orange-500'} text-white shadow-lg`}>
                   {vehicleType === 'tram' ? (
                     <Train className="w-5 h-5" />
                   ) : (
@@ -67,13 +65,9 @@ export function RouteSearchLoader({ isVisible }: RouteSearchLoaderProps) {
                 </div>
               </div>
             </div>
-            
-            <p className="text-sm text-gray-600 mt-2">
-              {vehicleType === 'tram' ? 'Sprawdzam połączenia tramwajowe...' : 'Sprawdzam połączenia autobusowe...'}
-            </p>
+
+            <p className="text-sm text-gray-600 mt-2">Sprawdzam połączenia...</p>
           </div>
-
-
         </div>
       </div>
 
@@ -88,8 +82,6 @@ export function RouteSearchLoader({ isVisible }: RouteSearchLoaderProps) {
             transform: translateX(-100%);
           }
         }
-        
-
       `}</style>
     </div>
   );
