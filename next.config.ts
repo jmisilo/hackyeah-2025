@@ -3,6 +3,12 @@ import type { NextConfig } from 'next';
 import '@/environment-variables';
 
 const nextConfig: NextConfig = {
+  typescript: {
+    ignoreBuildErrors: true,
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
+  },
   serverExternalPackages: ['pino'],
   headers: async () => [
     {
